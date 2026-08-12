@@ -16,7 +16,6 @@ De hecho, el generador de plantillas de este motor **llama directamente a esa AP
 | 01 | `generic-template-generator` | Resuelve la configuración de la entidad solicitada y pide el Excel a `enterprise-template-api`. |
 | 02 | `generic-bulk-loader` | Valida el archivo diligenciado fila por fila según la configuración de la entidad, y hace el insert dinámico en SQL Server. |
 
-**Entidades soportadas out-of-the-box** (mismas 10 de `enterprise-template-api`): `MEDICAMENTOS`, `MEDICAMENTOS_COMERCIALES`, `INSUMOS_COMERCIALES`, `INSUMOS_GENERICOS`, `USUARIOS`, `INVENTARIO`, `CONTRATOS`, `ASOCIACION_SEDES_CONTRATOS`, `PROCEDIMIENTOS`, `MANUAL_TARIFARIO`.
 
 Agregar una nueva entidad ya **no requiere crear un workflow nuevo** — solo se agrega una entrada al objeto `ENTITY_CONFIGS` dentro del nodo `Code` correspondiente.
 
