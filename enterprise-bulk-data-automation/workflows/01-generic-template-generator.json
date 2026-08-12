@@ -1,0 +1,45 @@
+{
+  "name": "Bulk Data Engine - Generic Template Generator",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When called by Main Router",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Configuración centralizada de entidades soportadas.\n// Reemplaza la necesidad de un workflow \"Generacion de plantilla\" por cada dominio.\n// Mismo patrón que TEMPLATE_BUILDERS en enterprise-template-api (FastAPI).\nconst ENTITY_CONFIGS = {\n  MEDICAMENTOS: { label: 'Medicamentos' },\n  MEDICAMENTOS_COMERCIALES: { label: 'Medicamentos Comerciales' },\n  INSUMOS_COMERCIALES: { label: 'Insumos Comerciales' },\n  INSUMOS_GENERICOS: { label: 'Insumos Genéricos' },\n  USUARIOS: { label: 'Usuarios' },\n  INVENTARIO: { label: 'Inventario' },\n  CONTRATOS: { label: 'Contratos' },\n  ASOCIACION_SEDES_CONTRATOS: { label: 'Asociación Sedes-Contratos' },\n  PROCEDIMIENTOS: { label: 'Procedimientos' },\n  MANUAL_TARIFARIO: { label: 'Manual Tarifario' }\n};\n\nconst input = $input.first().json;\nconst entity = (input.entity || '').toUpperCase();\nconst config = ENTITY_CONFIGS[entity];\n\nif (!config) {\n  throw new Error(`Entidad '${entity}' no soportada. Disponibles: ${Object.keys(ENTITY_CONFIGS).join(', ')}`);\n}\n\nreturn [{\n  json: {\n    template: entity,\n    filename: input.filename || `plantilla_${entity.toLowerCase()}.xlsx`,\n    lists: input.lists || {},\n    extra: input.extra || {}\n  }\n}];"
+      },
+      "id": "code-config",
+      "name": "Resolver Config de Entidad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://excel-template-api-test.yourcompany.example/api/v1/templates/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ template: $json.template, filename: $json.filename, lists: $json.lists, extra: $json.extra }) }}",
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "id": "http-generate",
+      "name": "Generar Excel (enterprise-template-api)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [400, 0]
+    }
+  ],
+  "connections": {
+    "When called by Main Router": { "main": [[{ "node": "Resolver Config de Entidad", "type": "main", "index": 0 }]] },
+    "Resolver Config de Entidad": { "main": [[{ "node": "Generar Excel (enterprise-template-api)", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

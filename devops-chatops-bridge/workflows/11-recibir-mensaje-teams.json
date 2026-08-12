@@ -1,0 +1,299 @@
+{
+  "updatedAt": "2026-02-04T18:52:09.867Z",
+  "createdAt": "2025-12-30T20:05:14.056Z",
+  "id": "7uXkPwHCiaqEkoHB",
+  "name": "Recibir Mensaje Teams",
+  "description": null,
+  "active": false,
+  "isArchived": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "32de56c1-c5a1-4c41-8077-a9098a00416a",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "d936f157-d39c-44af-a111-d2c7b7f8f7cf",
+      "name": "Webhook",
+      "webhookId": "32de56c1-c5a1-4c41-8077-a9098a00416a"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1672d84-8291-4f4b-aabf-ebba6a6c685d",
+              "name": "Body",
+              "value": "={{ $('Webhook').item.json.body.cuerpo }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        0
+      ],
+      "id": "06a1b8ea-e0be-41fc-aa26-b448283a9844",
+      "name": "Get Body"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f9f151ea-0575-47d9-a3a8-3ba6f5cc63fb",
+              "name": "Body_id",
+              "value": "={{ $('Get Body').item.json.Body.id }}",
+              "type": "string"
+            },
+            {
+              "id": "70f523ba-1955-4b07-af68-7da448c8f737",
+              "name": "Body_content",
+              "value": "={{ $('Get Body').item.json.Body.body.content }}",
+              "type": "string"
+            },
+            {
+              "id": "086b5997-e876-4e2b-b9ba-947ff64786a6",
+              "name": "Body_conversationId",
+              "value": "={{ $('Get Body').item.json.Body.conversationId }}",
+              "type": "string"
+            },
+            {
+              "id": "1877b19b-7c40-4953-ab3c-c7e6950961b0",
+              "name": "Body_plainTextContent",
+              "value": "={{ $json.Body.body.plainTextContent }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        400,
+        0
+      ],
+      "id": "52f53675-4377-4898-a53a-778d328f6d88",
+      "name": "Get Variables"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.Body_plainTextContent }}",
+        "options": {
+          "systemMessage": "Tu nombre es jarvis"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        16
+      ],
+      "id": "c16f7716-6ec5-4499-a6f6-5771f6cd867d",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        688,
+        192
+      ],
+      "id": "92312a3f-0610-4f7f-9dfa-6a5ae5dcad54",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "J9xCoyFmzFFGhAiV",
+          "name": "OpenAi account - Imedical: credenciales"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.Body_conversationId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        288
+      ],
+      "id": "792ad434-aa62-4ad5-b39b-5186a334adf0",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-app.azurewebsites.example:443/api/LG_MANDAR_MENSAJE_AUTOMATIZACIO_IMPLEMENTACION_N8N/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=YOUR_SAS_SIGNATURE",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "output",
+              "value": "={{ $('AI Agent').item.json.output }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        16
+      ],
+      "id": "5b6c18b2-e1ea-4544-93e4-d8922b685660",
+      "name": "HTTP Request"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Body": {
+      "main": [
+        [
+          {
+            "node": "Get Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Variables": {
+      "main": [
+        []
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "1746433f-26f9-436c-98e0-3923b098f859",
+  "activeVersionId": null,
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-12-30T20:05:14.056Z",
+      "createdAt": "2025-12-30T20:05:14.056Z",
+      "role": "workflow:owner",
+      "workflowId": "7uXkPwHCiaqEkoHB",
+      "projectId": "fTnylytOq7y7H3Px",
+      "project": {
+        "updatedAt": "2025-09-30T22:49:25.479Z",
+        "createdAt": "2025-09-30T22:45:44.786Z",
+        "id": "fTnylytOq7y7H3Px",
+        "name": "Alberto José Duque Gómez <alberto.duque@yourcompany.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-09-30T22:45:44.786Z",
+            "createdAt": "2025-09-30T22:45:44.786Z",
+            "userId": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+            "projectId": "fTnylytOq7y7H3Px",
+            "user": {
+              "updatedAt": "2026-08-11T21:46:31.645Z",
+              "createdAt": "2025-09-30T22:45:43.378Z",
+              "id": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+              "email": "alberto.duque@yourcompany.example",
+              "firstName": "Alberto José",
+              "lastName": "Duque Gómez",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-09-30T22:49:28.564Z",
+                "personalization_survey_n8n_version": "1.107.0"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "MxeXP185zMU9ZFde",
+                "userActivatedAt": 1759325657829,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1781033800351
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-08-11",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

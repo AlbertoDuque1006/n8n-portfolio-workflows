@@ -1,0 +1,1071 @@
+{
+  "updatedAt": "2026-06-09T01:14:50.257Z",
+  "createdAt": "2026-06-09T00:54:32.207Z",
+  "id": "lgEq0SlUCZzjYYrv",
+  "name": "JARVIS_ROUTER v2",
+  "description": "JARVIS Router v2: clasifica intenciones por regex (recordatorio, consulta, calendario_crear, calendario_consulta, foto, default) y enruta a los workflows correspondientes. Incluye soporte completo para Google Calendar.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "e9099a87-4278-42da-9626-0ad42f33fcb3",
+      "name": "Router Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        480
+      ],
+      "parameters": {
+        "path": "jarvis/router",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "08f64d41-7581-41bb-96a6-221b40d67c0a"
+    },
+    {
+      "id": "2b439b75-01c0-4294-b7e3-25258bf37ed4",
+      "name": "Normalizar Input Router",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst chatId = body.chatId ?? 0;\nconst userId = body.userId ?? 0;\nconst messageType = body.messageType ?? 'text';\nconst content = body.content ?? '';\nconst fileId = body.fileId ?? null;\nconst fragmentCount = body.fragmentCount ?? 1;\nreturn [{ json: { chatId, userId, messageType, content, fileId, fragmentCount } }];"
+      }
+    },
+    {
+      "id": "743d8d70-961f-4d34-ab1f-74106f842ce9",
+      "name": "Responder OK Router",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        480
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      }
+    },
+    {
+      "id": "897c0985-0203-4386-b81e-d75f22a04c4b",
+      "name": "Obtener DB User",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        672,
+        480
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT COALESCE((SELECT id FROM jarvis_users WHERE telegram_user_id = {{ $('Normalizar Input Router').first().json.userId }}), 0) AS db_user_id"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "acf7cf22-b3d0-4492-b41c-537fca7260c5",
+      "name": "Clasificar Intencion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const inp = $('Normalizar Input Router').first().json;\nconst chatId = inp.chatId;\nconst userId = inp.userId;\nconst messageType = inp.messageType;\nconst raw = String(inp.content || '');\nconst content = raw.toLowerCase().trim();\nconst fileId = inp.fileId;\nconst fragmentCount = inp.fragmentCount;\nconst dbUserId = $input.first().json.db_user_id;\n\nlet intention = 'default';\nlet reminderTitle = '', reminderDatetime = null, reminderDateFormatted = '';\nlet calTitle = '', calStartDatetime = null, calEndDatetime = null, calQueryRange = 'today';\nlet responseMessage = '';\n\nconst R_REMINDER = /recue?rdame?|recordar|avísame|avisame|en \\d+ (minutos?|horas?)|ma[nñ]ana a las?|hoy a las?/i;\nconst R_QUERY = /qu[eé] tengo(?! en el (calendario|agenda))|mis recordatorios|para hoy|para ma[nñ]ana(?! en el)|esta semana|pr[oó]ximos?/i;\nconst R_CAL_CREATE = /crea(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|agenda(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|programa(?:r)? (?:una? )?(?:cita|reuni[oó]n)|pon(?:er)? en (?:el )?calendario|a[nñ]ade al calendario/i;\nconst R_CAL_QUERY = /(?:mis )?eventos(?: de| del)?|calendario(?: de)? (?:hoy|ma[nñ]ana|esta semana)|qu[eé] tengo en (?:el )?(?:calendario|agenda)|reuniones(?: de hoy| de ma[nñ]ana)?/i;\n\nfunction parseDate(text) {\n  const now = new Date(); let m;\n  m = text.match(/en (\\d+) minutos?/); if (m) return new Date(now.getTime() + parseInt(m[1]) * 60000);\n  m = text.match(/en (\\d+) horas?/); if (m) return new Date(now.getTime() + parseInt(m[1]) * 3600000);\n  m = text.match(/ma[nñ]ana a las? (\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?/i);\n  if (m) { const d = new Date(now); d.setDate(d.getDate()+1); let h=parseInt(m[1]); const min=m[2]?parseInt(m[2]):0; if(m[3]==='pm'&&h<12)h+=12; d.setHours(h,min,0,0); return d; }\n  m = text.match(/hoy a las? (\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?/i);\n  if (m) { const d = new Date(now); let h=parseInt(m[1]); const min=m[2]?parseInt(m[2]):0; if(m[3]==='pm'&&h<12)h+=12; d.setHours(h,min,0,0); return d; }\n  return null;\n}\n\nif (messageType === 'photo' && content === '__foto_sin_contexto__') {\n  intention = 'foto_sin_contexto';\n  responseMessage = '\\u{1F4F8} Recibí tu imagen. ¿Qué quieres que haga con ella?';\n} else if (R_CAL_CREATE.test(content)) {\n  calTitle = raw.replace(/crea(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|agenda(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|programa(?:r)? (?:una? )?(?:cita|reuni[oó]n)|pon(?:er)? en (?:el )?calendario|a[nñ]ade al calendario/gi,'').replace(/\\s+/g,' ').trim();\n  if (calTitle.length < 3) calTitle = raw;\n  const pd = parseDate(content);\n  if (pd && !isNaN(pd.getTime())) {\n    intention = 'calendario_crear';\n    calStartDatetime = pd.toISOString();\n    calEndDatetime = new Date(pd.getTime() + 3600000).toISOString();\n    responseMessage = '\\u{1F4C5} Creando evento en tu Google Calendar...';\n  } else {\n    intention = 'default';\n    responseMessage = '\\u2753 No entendí la fecha del evento.\\n\\u2022 \"Crea una reunión mañana a las 3pm\"\\n\\u2022 \"Agenda una cita hoy a las 10am\"';\n  }\n} else if (R_CAL_QUERY.test(content)) {\n  intention = 'calendario_consulta';\n  if (/ma[nñ]ana/.test(content)) calQueryRange = 'tomorrow';\n  else if (/semana|próximos|proximos/.test(content)) calQueryRange = 'week';\n  else calQueryRange = 'today';\n} else if (R_REMINDER.test(content)) {\n  reminderTitle = raw.replace(/recue?rdame?|recordar|avísame|avisame/gi,'').replace(/\\s+/g,' ').trim();\n  if (reminderTitle.length < 3) reminderTitle = raw;\n  const pd = parseDate(content);\n  if (pd && !isNaN(pd.getTime())) {\n    intention = 'recordatorio';\n    reminderDatetime = pd.toISOString();\n    try { reminderDateFormatted = pd.toLocaleString('es-CO',{timeZone:'America/Bogota',weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { reminderDateFormatted = pd.toISOString(); }\n    responseMessage = '\\u2705 Listo! Te recuerdo el ' + reminderDateFormatted + ':\\n_(\"' + reminderTitle.substring(0,100) + '\")_';\n  } else {\n    intention = 'default';\n    responseMessage = '\\u2753 No entendí la fecha.\\n\\u2022 \"en 10 minutos\"\\n\\u2022 \"mañana a las 3pm\"\\n\\u2022 \"hoy a las 8am\"';\n  }\n} else if (R_QUERY.test(content)) {\n  intention = 'consulta';\n} else {\n  intention = 'default';\n  responseMessage = '\\u{1F44B} Estoy aquí para ayudarte.\\n\\n\\u2022 *Recordatorio*: \"Recuérdame ir al gym mañana a las 7am\"\\n\\u2022 *Agenda*: \"¿Qué tengo para hoy?\"\\n\\u2022 *Calendario*: \"¿Mis eventos de hoy?\"\\n\\u2022 *Crear evento*: \"Crea una reunión mañana a las 3pm\"';\n}\n\nreturn [{ json: { chatId, userId, dbUserId, messageType, content, fileId, fragmentCount, intention, reminderTitle, reminderDatetime, reminderDateFormatted, calTitle, calStartDatetime, calEndDatetime, calQueryRange, responseMessage } }];"
+      }
+    },
+    {
+      "id": "fd982ded-42d9-4a47-8968-8fd627966cd3",
+      "name": "Enrutar por Intencion",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1120,
+        416
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "recordatorio",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intention }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "recordatorio"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "consulta",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intention }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "consulta"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "calendario_crear",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intention }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "calendario_crear"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "calendario_consulta",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intention }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "calendario_consulta"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "foto",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intention }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "foto_sin_contexto"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "default"
+        }
+      }
+    },
+    {
+      "id": "a46a8651-82e6-4a6d-afdb-3dfd8c6da6b9",
+      "name": "Guardar Recordatorio",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO jarvis_reminders (user_id, title, remind_at, status) VALUES ({{ $json.dbUserId }}, '{{ $json.reminderTitle.replace(/'/g, \"''\").substring(0, 200) }}', '{{ $json.reminderDatetime }}'::timestamptz, 'pending') RETURNING id"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "6394b474-03f5-413a-aec1-166e530c751e",
+      "name": "Responder Recordatorio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/responder",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $('Clasificar Intencion').item.json.chatId, message: $('Clasificar Intencion').item.json.responseMessage, parseMode: 'Markdown' }) }}"
+      }
+    },
+    {
+      "id": "68393acf-b437-432d-a375-5a60b2c40436",
+      "name": "Query Recordatorios",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH r AS (SELECT title, remind_at FROM jarvis_reminders WHERE user_id = {{ $json.dbUserId }} AND status = 'pending' AND remind_at > NOW() ORDER BY remind_at ASC LIMIT 10) SELECT * FROM r UNION ALL SELECT NULL AS title, NULL AS remind_at WHERE NOT EXISTS (SELECT 1 FROM r)"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "1855a61e-f327-4e69-978b-894113d9ca4a",
+      "name": "Formatear Consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst chatId = $('Clasificar Intencion').first().json.chatId;\nlet msg;\nif (!items.length || !items[0].json.title) {\n  msg = '\\u{1F4CB} *No tienes recordatorios pendientes.*\\n\\nEscribe \"Recuérdame...\" para crear uno.';\n} else {\n  const lines = items.map(function(i) { const d = new Date(i.json.remind_at); let ds; try { ds = d.toLocaleString('es-CO',{timeZone:'America/Bogota',weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e){ds=i.json.remind_at;} return '\\u2022 ' + ds + ' \\u2014 ' + (i.json.title||'Sin título'); });\n  msg = '\\u{1F4CB} *Tus próximos recordatorios:*\\n' + lines.join('\\n');\n}\nreturn [{ json: { chatId, responseMessage: msg } }];"
+      }
+    },
+    {
+      "id": "fe7802a0-f8dd-4664-837d-4f6e30e4a981",
+      "name": "Responder Consulta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/responder",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+      }
+    },
+    {
+      "id": "6c3e251a-b050-439d-a151-50c0139835c4",
+      "name": "Llamar Calendar Crear",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/calendar",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, dbUserId: $json.dbUserId, action: 'create', title: $json.calTitle, startDatetime: $json.calStartDatetime, endDatetime: $json.calEndDatetime }) }}"
+      }
+    },
+    {
+      "id": "050e5bdf-4c16-4faa-97d1-7d78447c73b2",
+      "name": "Llamar Calendar Consulta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        576
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/calendar",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, dbUserId: $json.dbUserId, action: 'query', queryRange: $json.calQueryRange }) }}"
+      }
+    },
+    {
+      "id": "499ddaee-0e82-47bf-8889-fe0cd22ef2a9",
+      "name": "Responder Foto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        768
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/responder",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage }) }}"
+      }
+    },
+    {
+      "id": "c8c5cdd7-5131-4239-ba5a-e37671bab289",
+      "name": "Responder Default",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        960
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/responder",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Router Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Input Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Input Router": {
+      "main": [
+        [
+          {
+            "node": "Responder OK Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder OK Router": {
+      "main": [
+        [
+          {
+            "node": "Obtener DB User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener DB User": {
+      "main": [
+        [
+          {
+            "node": "Clasificar Intencion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar Intencion": {
+      "main": [
+        [
+          {
+            "node": "Enrutar por Intencion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutar por Intencion": {
+      "main": [
+        [
+          {
+            "node": "Guardar Recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Query Recordatorios",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Llamar Calendar Crear",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Llamar Calendar Consulta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Foto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Default",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Recordatorio": {
+      "main": [
+        [
+          {
+            "node": "Responder Recordatorio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Recordatorios": {
+      "main": [
+        [
+          {
+            "node": "Formatear Consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Consulta": {
+      "main": [
+        [
+          {
+            "node": "Responder Consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "74e1cc86-d3be-44d9-8f23-41bf2c806830",
+  "activeVersionId": "74e1cc86-d3be-44d9-8f23-41bf2c806830",
+  "versionCounter": 4,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-09T00:54:32.209Z",
+      "createdAt": "2026-06-09T00:54:32.209Z",
+      "role": "workflow:owner",
+      "workflowId": "lgEq0SlUCZzjYYrv",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-09T01:14:50.258Z",
+    "createdAt": "2026-06-09T01:14:50.258Z",
+    "versionId": "74e1cc86-d3be-44d9-8f23-41bf2c806830",
+    "workflowId": "lgEq0SlUCZzjYYrv",
+    "nodes": [
+      {
+        "id": "e9099a87-4278-42da-9626-0ad42f33fcb3",
+        "name": "Router Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          480
+        ],
+        "parameters": {
+          "path": "jarvis/router",
+          "httpMethod": "POST",
+          "responseMode": "responseNode"
+        },
+        "webhookId": "08f64d41-7581-41bb-96a6-221b40d67c0a"
+      },
+      {
+        "id": "2b439b75-01c0-4294-b7e3-25258bf37ed4",
+        "name": "Normalizar Input Router",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          480
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst chatId = body.chatId ?? 0;\nconst userId = body.userId ?? 0;\nconst messageType = body.messageType ?? 'text';\nconst content = body.content ?? '';\nconst fileId = body.fileId ?? null;\nconst fragmentCount = body.fragmentCount ?? 1;\nreturn [{ json: { chatId, userId, messageType, content, fileId, fragmentCount } }];"
+        }
+      },
+      {
+        "id": "743d8d70-961f-4d34-ab1f-74106f842ce9",
+        "name": "Responder OK Router",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          448,
+          480
+        ],
+        "parameters": {
+          "respondWith": "noData",
+          "options": {}
+        }
+      },
+      {
+        "id": "897c0985-0203-4386-b81e-d75f22a04c4b",
+        "name": "Obtener DB User",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          672,
+          480
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=SELECT COALESCE((SELECT id FROM jarvis_users WHERE telegram_user_id = {{ $('Normalizar Input Router').first().json.userId }}), 0) AS db_user_id"
+        },
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      },
+      {
+        "id": "acf7cf22-b3d0-4492-b41c-537fca7260c5",
+        "name": "Clasificar Intencion",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          896,
+          480
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const inp = $('Normalizar Input Router').first().json;\nconst chatId = inp.chatId;\nconst userId = inp.userId;\nconst messageType = inp.messageType;\nconst raw = String(inp.content || '');\nconst content = raw.toLowerCase().trim();\nconst fileId = inp.fileId;\nconst fragmentCount = inp.fragmentCount;\nconst dbUserId = $input.first().json.db_user_id;\n\nlet intention = 'default';\nlet reminderTitle = '', reminderDatetime = null, reminderDateFormatted = '';\nlet calTitle = '', calStartDatetime = null, calEndDatetime = null, calQueryRange = 'today';\nlet responseMessage = '';\n\nconst R_REMINDER = /recue?rdame?|recordar|avísame|avisame|en \\d+ (minutos?|horas?)|ma[nñ]ana a las?|hoy a las?/i;\nconst R_QUERY = /qu[eé] tengo(?! en el (calendario|agenda))|mis recordatorios|para hoy|para ma[nñ]ana(?! en el)|esta semana|pr[oó]ximos?/i;\nconst R_CAL_CREATE = /crea(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|agenda(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|programa(?:r)? (?:una? )?(?:cita|reuni[oó]n)|pon(?:er)? en (?:el )?calendario|a[nñ]ade al calendario/i;\nconst R_CAL_QUERY = /(?:mis )?eventos(?: de| del)?|calendario(?: de)? (?:hoy|ma[nñ]ana|esta semana)|qu[eé] tengo en (?:el )?(?:calendario|agenda)|reuniones(?: de hoy| de ma[nñ]ana)?/i;\n\nfunction parseDate(text) {\n  const now = new Date(); let m;\n  m = text.match(/en (\\d+) minutos?/); if (m) return new Date(now.getTime() + parseInt(m[1]) * 60000);\n  m = text.match(/en (\\d+) horas?/); if (m) return new Date(now.getTime() + parseInt(m[1]) * 3600000);\n  m = text.match(/ma[nñ]ana a las? (\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?/i);\n  if (m) { const d = new Date(now); d.setDate(d.getDate()+1); let h=parseInt(m[1]); const min=m[2]?parseInt(m[2]):0; if(m[3]==='pm'&&h<12)h+=12; d.setHours(h,min,0,0); return d; }\n  m = text.match(/hoy a las? (\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?/i);\n  if (m) { const d = new Date(now); let h=parseInt(m[1]); const min=m[2]?parseInt(m[2]):0; if(m[3]==='pm'&&h<12)h+=12; d.setHours(h,min,0,0); return d; }\n  return null;\n}\n\nif (messageType === 'photo' && content === '__foto_sin_contexto__') {\n  intention = 'foto_sin_contexto';\n  responseMessage = '\\u{1F4F8} Recibí tu imagen. ¿Qué quieres que haga con ella?';\n} else if (R_CAL_CREATE.test(content)) {\n  calTitle = raw.replace(/crea(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|agenda(?:r)? (?:una? )?(?:reuni[oó]n|evento|cita)|programa(?:r)? (?:una? )?(?:cita|reuni[oó]n)|pon(?:er)? en (?:el )?calendario|a[nñ]ade al calendario/gi,'').replace(/\\s+/g,' ').trim();\n  if (calTitle.length < 3) calTitle = raw;\n  const pd = parseDate(content);\n  if (pd && !isNaN(pd.getTime())) {\n    intention = 'calendario_crear';\n    calStartDatetime = pd.toISOString();\n    calEndDatetime = new Date(pd.getTime() + 3600000).toISOString();\n    responseMessage = '\\u{1F4C5} Creando evento en tu Google Calendar...';\n  } else {\n    intention = 'default';\n    responseMessage = '\\u2753 No entendí la fecha del evento.\\n\\u2022 \"Crea una reunión mañana a las 3pm\"\\n\\u2022 \"Agenda una cita hoy a las 10am\"';\n  }\n} else if (R_CAL_QUERY.test(content)) {\n  intention = 'calendario_consulta';\n  if (/ma[nñ]ana/.test(content)) calQueryRange = 'tomorrow';\n  else if (/semana|próximos|proximos/.test(content)) calQueryRange = 'week';\n  else calQueryRange = 'today';\n} else if (R_REMINDER.test(content)) {\n  reminderTitle = raw.replace(/recue?rdame?|recordar|avísame|avisame/gi,'').replace(/\\s+/g,' ').trim();\n  if (reminderTitle.length < 3) reminderTitle = raw;\n  const pd = parseDate(content);\n  if (pd && !isNaN(pd.getTime())) {\n    intention = 'recordatorio';\n    reminderDatetime = pd.toISOString();\n    try { reminderDateFormatted = pd.toLocaleString('es-CO',{timeZone:'America/Bogota',weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { reminderDateFormatted = pd.toISOString(); }\n    responseMessage = '\\u2705 Listo! Te recuerdo el ' + reminderDateFormatted + ':\\n_(\"' + reminderTitle.substring(0,100) + '\")_';\n  } else {\n    intention = 'default';\n    responseMessage = '\\u2753 No entendí la fecha.\\n\\u2022 \"en 10 minutos\"\\n\\u2022 \"mañana a las 3pm\"\\n\\u2022 \"hoy a las 8am\"';\n  }\n} else if (R_QUERY.test(content)) {\n  intention = 'consulta';\n} else {\n  intention = 'default';\n  responseMessage = '\\u{1F44B} Estoy aquí para ayudarte.\\n\\n\\u2022 *Recordatorio*: \"Recuérdame ir al gym mañana a las 7am\"\\n\\u2022 *Agenda*: \"¿Qué tengo para hoy?\"\\n\\u2022 *Calendario*: \"¿Mis eventos de hoy?\"\\n\\u2022 *Crear evento*: \"Crea una reunión mañana a las 3pm\"';\n}\n\nreturn [{ json: { chatId, userId, dbUserId, messageType, content, fileId, fragmentCount, intention, reminderTitle, reminderDatetime, reminderDateFormatted, calTitle, calStartDatetime, calEndDatetime, calQueryRange, responseMessage } }];"
+        }
+      },
+      {
+        "id": "fd982ded-42d9-4a47-8968-8fd627966cd3",
+        "name": "Enrutar por Intencion",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.2,
+        "position": [
+          1120,
+          416
+        ],
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "outputKey": "recordatorio",
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intention }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "recordatorio"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "outputKey": "consulta",
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intention }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "consulta"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "outputKey": "calendario_crear",
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intention }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "calendario_crear"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "outputKey": "calendario_consulta",
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intention }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "calendario_consulta"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "outputKey": "foto",
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "loose"
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.intention }}",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "rightValue": "foto_sin_contexto"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra",
+            "renameFallbackOutput": "default"
+          }
+        }
+      },
+      {
+        "id": "a46a8651-82e6-4a6d-afdb-3dfd8c6da6b9",
+        "name": "Guardar Recordatorio",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1344,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=INSERT INTO jarvis_reminders (user_id, title, remind_at, status) VALUES ({{ $json.dbUserId }}, '{{ $json.reminderTitle.replace(/'/g, \"''\").substring(0, 200) }}', '{{ $json.reminderDatetime }}'::timestamptz, 'pending') RETURNING id"
+        },
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      },
+      {
+        "id": "6394b474-03f5-413a-aec1-166e530c751e",
+        "name": "Responder Recordatorio",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1568,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/responder",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $('Clasificar Intencion').item.json.chatId, message: $('Clasificar Intencion').item.json.responseMessage, parseMode: 'Markdown' }) }}"
+        }
+      },
+      {
+        "id": "68393acf-b437-432d-a375-5a60b2c40436",
+        "name": "Query Recordatorios",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1344,
+          192
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=WITH r AS (SELECT title, remind_at FROM jarvis_reminders WHERE user_id = {{ $json.dbUserId }} AND status = 'pending' AND remind_at > NOW() ORDER BY remind_at ASC LIMIT 10) SELECT * FROM r UNION ALL SELECT NULL AS title, NULL AS remind_at WHERE NOT EXISTS (SELECT 1 FROM r)"
+        },
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      },
+      {
+        "id": "1855a61e-f327-4e69-978b-894113d9ca4a",
+        "name": "Formatear Consulta",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1568,
+          192
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const items = $input.all();\nconst chatId = $('Clasificar Intencion').first().json.chatId;\nlet msg;\nif (!items.length || !items[0].json.title) {\n  msg = '\\u{1F4CB} *No tienes recordatorios pendientes.*\\n\\nEscribe \"Recuérdame...\" para crear uno.';\n} else {\n  const lines = items.map(function(i) { const d = new Date(i.json.remind_at); let ds; try { ds = d.toLocaleString('es-CO',{timeZone:'America/Bogota',weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e){ds=i.json.remind_at;} return '\\u2022 ' + ds + ' \\u2014 ' + (i.json.title||'Sin título'); });\n  msg = '\\u{1F4CB} *Tus próximos recordatorios:*\\n' + lines.join('\\n');\n}\nreturn [{ json: { chatId, responseMessage: msg } }];"
+        }
+      },
+      {
+        "id": "fe7802a0-f8dd-4664-837d-4f6e30e4a981",
+        "name": "Responder Consulta",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1792,
+          192
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/responder",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+        }
+      },
+      {
+        "id": "6c3e251a-b050-439d-a151-50c0139835c4",
+        "name": "Llamar Calendar Crear",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1344,
+          384
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/calendar",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, dbUserId: $json.dbUserId, action: 'create', title: $json.calTitle, startDatetime: $json.calStartDatetime, endDatetime: $json.calEndDatetime }) }}"
+        }
+      },
+      {
+        "id": "050e5bdf-4c16-4faa-97d1-7d78447c73b2",
+        "name": "Llamar Calendar Consulta",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1344,
+          576
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/calendar",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, dbUserId: $json.dbUserId, action: 'query', queryRange: $json.calQueryRange }) }}"
+        }
+      },
+      {
+        "id": "499ddaee-0e82-47bf-8889-fe0cd22ef2a9",
+        "name": "Responder Foto",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1344,
+          768
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/responder",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage }) }}"
+        }
+      },
+      {
+        "id": "c8c5cdd7-5131-4239-ba5a-e37671bab289",
+        "name": "Responder Default",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1344,
+          960
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/responder",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+        }
+      }
+    ],
+    "connections": {
+      "Router Webhook": {
+        "main": [
+          [
+            {
+              "node": "Normalizar Input Router",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalizar Input Router": {
+        "main": [
+          [
+            {
+              "node": "Responder OK Router",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Responder OK Router": {
+        "main": [
+          [
+            {
+              "node": "Obtener DB User",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Obtener DB User": {
+        "main": [
+          [
+            {
+              "node": "Clasificar Intencion",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Clasificar Intencion": {
+        "main": [
+          [
+            {
+              "node": "Enrutar por Intencion",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Enrutar por Intencion": {
+        "main": [
+          [
+            {
+              "node": "Guardar Recordatorio",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Query Recordatorios",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Llamar Calendar Crear",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Llamar Calendar Consulta",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Responder Foto",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Responder Default",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Guardar Recordatorio": {
+        "main": [
+          [
+            {
+              "node": "Responder Recordatorio",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query Recordatorios": {
+        "main": [
+          [
+            {
+              "node": "Formatear Consulta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Formatear Consulta": {
+        "main": [
+          [
+            {
+              "node": "Responder Consulta",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "David Tenorio Cruz",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-09T01:14:52.491Z",
+        "id": 85,
+        "workflowId": "lgEq0SlUCZzjYYrv",
+        "versionId": "74e1cc86-d3be-44d9-8f23-41bf2c806830",
+        "event": "activated",
+        "userId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    ]
+  }
+}

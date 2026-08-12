@@ -1,0 +1,873 @@
+{
+  "updatedAt": "2026-06-09T00:05:46.354Z",
+  "createdAt": "2026-06-08T14:21:48.980Z",
+  "id": "VE94sCxnn4Q4mlXO",
+  "name": "JARVIS_RECEIVER",
+  "description": "Recibe todos los mensajes de Telegram, responde 200 inmediatamente, valida usuario, acumula fragmentos en Redis con lógica de foto/texto y TTL basado en timestamp, loguea en Postgres.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "274d83bc-19ad-4a87-a40b-06f7f7cb401d",
+      "name": "Telegram Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "jarvis/telegram",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "c4bf8e4a-b317-4127-8d11-df216bf8176c"
+    },
+    {
+      "id": "e4d81b71-6d42-4291-8c06-29f453530567",
+      "name": "Normalizar Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "chatId",
+              "name": "chatId",
+              "value": "={{ $json.body?.message?.chat?.id ?? $json.message?.chat?.id ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "userId",
+              "name": "userId",
+              "value": "={{ $json.body?.message?.from?.id ?? $json.message?.from?.id ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "messageId",
+              "name": "messageId",
+              "value": "={{ $json.body?.message?.message_id ?? $json.message?.message_id ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "messageTimestamp",
+              "name": "messageTimestamp",
+              "value": "={{ $json.body?.message?.date ?? $json.message?.date ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "username",
+              "name": "username",
+              "value": "={{ $json.body?.message?.from?.username ?? $json.message?.from?.username ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "firstName",
+              "name": "firstName",
+              "value": "={{ $json.body?.message?.from?.first_name ?? $json.message?.from?.first_name ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "messageType",
+              "name": "messageType",
+              "value": "={{ ($json.body?.message?.photo || $json.message?.photo) ? 'photo' : (($json.body?.message?.voice || $json.message?.voice) ? 'voice' : (($json.body?.message?.document || $json.message?.document) ? 'document' : 'text')) }}",
+              "type": "string"
+            },
+            {
+              "id": "content",
+              "name": "content",
+              "value": "={{ $json.body?.message?.text ?? $json.message?.text ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "fileId",
+              "name": "fileId",
+              "value": "={{ ($json.body?.message?.photo || $json.message?.photo) ? ($json.body?.message?.photo || $json.message?.photo).slice(-1)[0].file_id : '' }}",
+              "type": "string"
+            },
+            {
+              "id": "caption",
+              "name": "caption",
+              "value": "={{ $json.body?.message?.caption ?? $json.message?.caption ?? '' }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "416d497b-d6fe-453d-a967-9ac6336399b6",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      }
+    },
+    {
+      "id": "23f623d0-1a01-490a-a831-6cca6fbc9032",
+      "name": "Verificar Usuario",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT id AS db_user_id FROM jarvis_users WHERE telegram_user_id = {{ $('Normalizar Payload').item.json.userId }} AND is_active = TRUE LIMIT 1"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "e2e9f80c-2941-4b6d-86ba-76c961584b44",
+      "name": "Preparar Datos",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dbUserId",
+              "name": "dbUserId",
+              "value": "={{ $json.db_user_id }}",
+              "type": "number"
+            },
+            {
+              "id": "chatId",
+              "name": "chatId",
+              "value": "={{ $('Normalizar Payload').item.json.chatId }}",
+              "type": "number"
+            },
+            {
+              "id": "userId",
+              "name": "userId",
+              "value": "={{ $('Normalizar Payload').item.json.userId }}",
+              "type": "number"
+            },
+            {
+              "id": "messageType",
+              "name": "messageType",
+              "value": "={{ $('Normalizar Payload').item.json.messageType }}",
+              "type": "string"
+            },
+            {
+              "id": "content",
+              "name": "content",
+              "value": "={{ $('Normalizar Payload').item.json.content }}",
+              "type": "string"
+            },
+            {
+              "id": "fileId",
+              "name": "fileId",
+              "value": "={{ $('Normalizar Payload').item.json.fileId }}",
+              "type": "string"
+            },
+            {
+              "id": "caption",
+              "name": "caption",
+              "value": "={{ $('Normalizar Payload').item.json.caption }}",
+              "type": "string"
+            },
+            {
+              "id": "messageId",
+              "name": "messageId",
+              "value": "={{ $('Normalizar Payload').item.json.messageId }}",
+              "type": "number"
+            },
+            {
+              "id": "messageTimestamp",
+              "name": "messageTimestamp",
+              "value": "={{ $('Normalizar Payload').item.json.messageTimestamp }}",
+              "type": "number"
+            },
+            {
+              "id": "firstName",
+              "name": "firstName",
+              "value": "={{ $('Normalizar Payload').item.json.firstName }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "26fd0ab1-c93f-4720-8d65-0d1c720ea4dd",
+      "name": "Actualizar Last Seen",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE jarvis_users SET last_seen_at = NOW() WHERE id = {{ $('Preparar Datos').item.json.dbUserId }}"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "14c2f893-fe03-4f65-962d-1c380ca001c0",
+      "name": "Obtener Buffer",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "operation": "get",
+        "key": "=jarvis:buffer:{{ $('Preparar Datos').item.json.chatId }}:{{ $('Preparar Datos').item.json.userId }}",
+        "propertyName": "bufferValue",
+        "keyType": "automatic"
+      },
+      "credentials": {
+        "redis": {
+          "id": "nbhSzTen4hsNL6Bf",
+          "name": "Redis account - Local"
+        }
+      }
+    },
+    {
+      "id": "748b2624-2d38-4dd5-9d84-328e0d6f175c",
+      "name": "Procesar Buffer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const datos = $('Preparar Datos').first().json;\nconst bufferRaw = $input.first().json.bufferValue;\nlet bufferData;\nif (bufferRaw && bufferRaw !== 'null' && String(bufferRaw).trim() !== '') {\n  try { bufferData = JSON.parse(String(bufferRaw)); } catch(e) {\n    bufferData = { fragments: [], lastUpdatedMs: Date.now(), ttlSeconds: 5 };\n  }\n} else {\n  bufferData = { fragments: [], lastUpdatedMs: Date.now(), ttlSeconds: 5 };\n}\nconst fragment = {\n  type: datos.messageType,\n  content: datos.content || null,\n  fileId: datos.fileId || null,\n  caption: datos.caption || null,\n  timestamp: datos.messageTimestamp,\n  messageId: datos.messageId,\n  awaitingContext: datos.messageType === 'photo' && !datos.caption\n};\nif (fragment.type === 'text') {\n  bufferData.fragments = bufferData.fragments.map(function(f) {\n    if (f.type === 'photo' && f.awaitingContext) {\n      return Object.assign({}, f, { awaitingContext: false, contextText: fragment.content });\n    }\n    return f;\n  });\n}\nbufferData.fragments.push(fragment);\nbufferData.lastUpdatedMs = Date.now();\nconst hasPhotoAwaiting = bufferData.fragments.some(function(f) { return f.awaitingContext; });\nbufferData.ttlSeconds = hasPhotoAwaiting ? 15 : 5;\nif (bufferData.fragments.length > 20) bufferData.fragments = bufferData.fragments.slice(-20);\nconst sanitizedContent = (datos.content || datos.caption || 'media').replace(/'/g, \"''\").substring(0, 4000);\nreturn [{ json: {\n  bufferKey: 'jarvis:buffer:' + datos.chatId + ':' + datos.userId,\n  bufferValue: JSON.stringify(bufferData),\n  chatId: datos.chatId,\n  userId: datos.userId,\n  dbUserId: datos.dbUserId,\n  messageType: datos.messageType,\n  sanitizedContent: sanitizedContent\n}}];"
+      }
+    },
+    {
+      "id": "6680a122-4f06-43af-9e91-da6d38d37f59",
+      "name": "Guardar Buffer",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $json.bufferKey }}",
+        "value": "={{ $json.bufferValue }}"
+      },
+      "credentials": {
+        "redis": {
+          "id": "nbhSzTen4hsNL6Bf",
+          "name": "Redis account - Local"
+        }
+      }
+    },
+    {
+      "id": "4e7ba5ae-3457-4843-b921-35281b7202e7",
+      "name": "Log Fragmento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2016,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO jarvis_conversations (user_id, telegram_chat_id, role, content, content_type, metadata) VALUES ({{ $('Procesar Buffer').item.json.dbUserId }}, {{ $('Procesar Buffer').item.json.chatId }}, 'user', '{{ $('Procesar Buffer').item.json.sanitizedContent }}', '{{ $('Procesar Buffer').item.json.messageType }}', '{\"fragment\": true}') RETURNING id"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Payload": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder OK": {
+      "main": [
+        [
+          {
+            "node": "Verificar Usuario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Usuario": {
+      "main": [
+        [
+          {
+            "node": "Preparar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Datos": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Last Seen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Last Seen": {
+      "main": [
+        [
+          {
+            "node": "Obtener Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Buffer": {
+      "main": [
+        [
+          {
+            "node": "Procesar Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Buffer": {
+      "main": [
+        [
+          {
+            "node": "Guardar Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Buffer": {
+      "main": [
+        [
+          {
+            "node": "Log Fragmento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "ca9eb4e9-69e5-4aae-adfd-f3ca9c7e1233",
+  "activeVersionId": "ca9eb4e9-69e5-4aae-adfd-f3ca9c7e1233",
+  "versionCounter": 1,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-08T14:21:48.983Z",
+      "createdAt": "2026-06-08T14:21:48.983Z",
+      "role": "workflow:owner",
+      "workflowId": "VE94sCxnn4Q4mlXO",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-08T14:21:48.984Z",
+    "createdAt": "2026-06-08T14:21:48.984Z",
+    "versionId": "ca9eb4e9-69e5-4aae-adfd-f3ca9c7e1233",
+    "workflowId": "VE94sCxnn4Q4mlXO",
+    "nodes": [
+      {
+        "id": "274d83bc-19ad-4a87-a40b-06f7f7cb401d",
+        "name": "Telegram Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "path": "jarvis/telegram",
+          "httpMethod": "POST",
+          "responseMode": "responseNode"
+        },
+        "webhookId": "c4bf8e4a-b317-4127-8d11-df216bf8176c"
+      },
+      {
+        "id": "e4d81b71-6d42-4291-8c06-29f453530567",
+        "name": "Normalizar Payload",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          224,
+          0
+        ],
+        "parameters": {
+          "mode": "manual",
+          "assignments": {
+            "assignments": [
+              {
+                "id": "chatId",
+                "name": "chatId",
+                "value": "={{ $json.body?.message?.chat?.id ?? $json.message?.chat?.id ?? 0 }}",
+                "type": "number"
+              },
+              {
+                "id": "userId",
+                "name": "userId",
+                "value": "={{ $json.body?.message?.from?.id ?? $json.message?.from?.id ?? 0 }}",
+                "type": "number"
+              },
+              {
+                "id": "messageId",
+                "name": "messageId",
+                "value": "={{ $json.body?.message?.message_id ?? $json.message?.message_id ?? 0 }}",
+                "type": "number"
+              },
+              {
+                "id": "messageTimestamp",
+                "name": "messageTimestamp",
+                "value": "={{ $json.body?.message?.date ?? $json.message?.date ?? 0 }}",
+                "type": "number"
+              },
+              {
+                "id": "username",
+                "name": "username",
+                "value": "={{ $json.body?.message?.from?.username ?? $json.message?.from?.username ?? '' }}",
+                "type": "string"
+              },
+              {
+                "id": "firstName",
+                "name": "firstName",
+                "value": "={{ $json.body?.message?.from?.first_name ?? $json.message?.from?.first_name ?? '' }}",
+                "type": "string"
+              },
+              {
+                "id": "messageType",
+                "name": "messageType",
+                "value": "={{ ($json.body?.message?.photo || $json.message?.photo) ? 'photo' : (($json.body?.message?.voice || $json.message?.voice) ? 'voice' : (($json.body?.message?.document || $json.message?.document) ? 'document' : 'text')) }}",
+                "type": "string"
+              },
+              {
+                "id": "content",
+                "name": "content",
+                "value": "={{ $json.body?.message?.text ?? $json.message?.text ?? '' }}",
+                "type": "string"
+              },
+              {
+                "id": "fileId",
+                "name": "fileId",
+                "value": "={{ ($json.body?.message?.photo || $json.message?.photo) ? ($json.body?.message?.photo || $json.message?.photo).slice(-1)[0].file_id : '' }}",
+                "type": "string"
+              },
+              {
+                "id": "caption",
+                "name": "caption",
+                "value": "={{ $json.body?.message?.caption ?? $json.message?.caption ?? '' }}",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "416d497b-d6fe-453d-a967-9ac6336399b6",
+        "name": "Responder OK",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          448,
+          0
+        ],
+        "parameters": {
+          "respondWith": "noData",
+          "options": {}
+        }
+      },
+      {
+        "id": "23f623d0-1a01-490a-a831-6cca6fbc9032",
+        "name": "Verificar Usuario",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          672,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=SELECT id AS db_user_id FROM jarvis_users WHERE telegram_user_id = {{ $('Normalizar Payload').item.json.userId }} AND is_active = TRUE LIMIT 1"
+        },
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      },
+      {
+        "id": "e2e9f80c-2941-4b6d-86ba-76c961584b44",
+        "name": "Preparar Datos",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          896,
+          0
+        ],
+        "parameters": {
+          "mode": "manual",
+          "assignments": {
+            "assignments": [
+              {
+                "id": "dbUserId",
+                "name": "dbUserId",
+                "value": "={{ $json.db_user_id }}",
+                "type": "number"
+              },
+              {
+                "id": "chatId",
+                "name": "chatId",
+                "value": "={{ $('Normalizar Payload').item.json.chatId }}",
+                "type": "number"
+              },
+              {
+                "id": "userId",
+                "name": "userId",
+                "value": "={{ $('Normalizar Payload').item.json.userId }}",
+                "type": "number"
+              },
+              {
+                "id": "messageType",
+                "name": "messageType",
+                "value": "={{ $('Normalizar Payload').item.json.messageType }}",
+                "type": "string"
+              },
+              {
+                "id": "content",
+                "name": "content",
+                "value": "={{ $('Normalizar Payload').item.json.content }}",
+                "type": "string"
+              },
+              {
+                "id": "fileId",
+                "name": "fileId",
+                "value": "={{ $('Normalizar Payload').item.json.fileId }}",
+                "type": "string"
+              },
+              {
+                "id": "caption",
+                "name": "caption",
+                "value": "={{ $('Normalizar Payload').item.json.caption }}",
+                "type": "string"
+              },
+              {
+                "id": "messageId",
+                "name": "messageId",
+                "value": "={{ $('Normalizar Payload').item.json.messageId }}",
+                "type": "number"
+              },
+              {
+                "id": "messageTimestamp",
+                "name": "messageTimestamp",
+                "value": "={{ $('Normalizar Payload').item.json.messageTimestamp }}",
+                "type": "number"
+              },
+              {
+                "id": "firstName",
+                "name": "firstName",
+                "value": "={{ $('Normalizar Payload').item.json.firstName }}",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "26fd0ab1-c93f-4720-8d65-0d1c720ea4dd",
+        "name": "Actualizar Last Seen",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1120,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=UPDATE jarvis_users SET last_seen_at = NOW() WHERE id = {{ $('Preparar Datos').item.json.dbUserId }}"
+        },
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      },
+      {
+        "id": "14c2f893-fe03-4f65-962d-1c380ca001c0",
+        "name": "Obtener Buffer",
+        "type": "n8n-nodes-base.redis",
+        "typeVersion": 1,
+        "position": [
+          1344,
+          0
+        ],
+        "parameters": {
+          "operation": "get",
+          "key": "=jarvis:buffer:{{ $('Preparar Datos').item.json.chatId }}:{{ $('Preparar Datos').item.json.userId }}",
+          "propertyName": "bufferValue",
+          "keyType": "automatic"
+        },
+        "credentials": {
+          "redis": {
+            "id": "nbhSzTen4hsNL6Bf",
+            "name": "Redis account - Local"
+          }
+        }
+      },
+      {
+        "id": "748b2624-2d38-4dd5-9d84-328e0d6f175c",
+        "name": "Procesar Buffer",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1568,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const datos = $('Preparar Datos').first().json;\nconst bufferRaw = $input.first().json.bufferValue;\nlet bufferData;\nif (bufferRaw && bufferRaw !== 'null' && String(bufferRaw).trim() !== '') {\n  try { bufferData = JSON.parse(String(bufferRaw)); } catch(e) {\n    bufferData = { fragments: [], lastUpdatedMs: Date.now(), ttlSeconds: 5 };\n  }\n} else {\n  bufferData = { fragments: [], lastUpdatedMs: Date.now(), ttlSeconds: 5 };\n}\nconst fragment = {\n  type: datos.messageType,\n  content: datos.content || null,\n  fileId: datos.fileId || null,\n  caption: datos.caption || null,\n  timestamp: datos.messageTimestamp,\n  messageId: datos.messageId,\n  awaitingContext: datos.messageType === 'photo' && !datos.caption\n};\nif (fragment.type === 'text') {\n  bufferData.fragments = bufferData.fragments.map(function(f) {\n    if (f.type === 'photo' && f.awaitingContext) {\n      return Object.assign({}, f, { awaitingContext: false, contextText: fragment.content });\n    }\n    return f;\n  });\n}\nbufferData.fragments.push(fragment);\nbufferData.lastUpdatedMs = Date.now();\nconst hasPhotoAwaiting = bufferData.fragments.some(function(f) { return f.awaitingContext; });\nbufferData.ttlSeconds = hasPhotoAwaiting ? 15 : 5;\nif (bufferData.fragments.length > 20) bufferData.fragments = bufferData.fragments.slice(-20);\nconst sanitizedContent = (datos.content || datos.caption || 'media').replace(/'/g, \"''\").substring(0, 4000);\nreturn [{ json: {\n  bufferKey: 'jarvis:buffer:' + datos.chatId + ':' + datos.userId,\n  bufferValue: JSON.stringify(bufferData),\n  chatId: datos.chatId,\n  userId: datos.userId,\n  dbUserId: datos.dbUserId,\n  messageType: datos.messageType,\n  sanitizedContent: sanitizedContent\n}}];"
+        }
+      },
+      {
+        "id": "6680a122-4f06-43af-9e91-da6d38d37f59",
+        "name": "Guardar Buffer",
+        "type": "n8n-nodes-base.redis",
+        "typeVersion": 1,
+        "position": [
+          1792,
+          0
+        ],
+        "parameters": {
+          "operation": "set",
+          "key": "={{ $json.bufferKey }}",
+          "value": "={{ $json.bufferValue }}"
+        },
+        "credentials": {
+          "redis": {
+            "id": "nbhSzTen4hsNL6Bf",
+            "name": "Redis account - Local"
+          }
+        }
+      },
+      {
+        "id": "4e7ba5ae-3457-4843-b921-35281b7202e7",
+        "name": "Log Fragmento",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          2016,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "=INSERT INTO jarvis_conversations (user_id, telegram_chat_id, role, content, content_type, metadata) VALUES ({{ $('Procesar Buffer').item.json.dbUserId }}, {{ $('Procesar Buffer').item.json.chatId }}, 'user', '{{ $('Procesar Buffer').item.json.sanitizedContent }}', '{{ $('Procesar Buffer').item.json.messageType }}', '{\"fragment\": true}') RETURNING id"
+        },
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Telegram Webhook": {
+        "main": [
+          [
+            {
+              "node": "Normalizar Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalizar Payload": {
+        "main": [
+          [
+            {
+              "node": "Responder OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Responder OK": {
+        "main": [
+          [
+            {
+              "node": "Verificar Usuario",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Verificar Usuario": {
+        "main": [
+          [
+            {
+              "node": "Preparar Datos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Datos": {
+        "main": [
+          [
+            {
+              "node": "Actualizar Last Seen",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Actualizar Last Seen": {
+        "main": [
+          [
+            {
+              "node": "Obtener Buffer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Obtener Buffer": {
+        "main": [
+          [
+            {
+              "node": "Procesar Buffer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Procesar Buffer": {
+        "main": [
+          [
+            {
+              "node": "Guardar Buffer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Guardar Buffer": {
+        "main": [
+          [
+            {
+              "node": "Log Fragmento",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "David Tenorio Cruz",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-08T19:48:10.158Z",
+        "id": 66,
+        "workflowId": "VE94sCxnn4Q4mlXO",
+        "versionId": "ca9eb4e9-69e5-4aae-adfd-f3ca9c7e1233",
+        "event": "activated",
+        "userId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    ]
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "name": "Bulk Data Engine - Main Router",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bulk-data-engine",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-main",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-40, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Punto único de entrada: valida el modo de operación solicitado.\n// mode: 'template'  -> generar plantilla Excel para un entity\n// mode: 'load'      -> cargar masivamente un archivo diligenciado\nconst body = $input.first().json.body || $input.first().json;\nconst mode = (body.mode || '').toString().trim().toLowerCase();\nconst entity = (body.entity || '').toString().trim().toUpperCase();\n\nif (!['template', 'load'].includes(mode)) {\n  throw new Error(`Modo inválido: '${mode}'. Usa 'template' o 'load'.`);\n}\nif (!entity) {\n  throw new Error('Falta el campo \"entity\" (ej: USUARIOS, MEDICAMENTOS, CONTRATOS...).');\n}\n\nreturn [{ json: { ...body, mode, entity } }];"
+      },
+      "id": "code-parse",
+      "name": "Validar Solicitud",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [180, 0]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "template",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "template"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "load",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "outputKey": "load"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-mode",
+      "name": "Switch (mode)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_ID_OF_01-generic-template-generator",
+          "mode": "list"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "exec-template",
+      "name": "Ejecutar: Generador de Plantilla",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [640, -100]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_ID_OF_02-generic-bulk-loader",
+          "mode": "list"
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "id": "exec-loader",
+      "name": "Ejecutar: Cargador Masivo",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [640, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Validar Solicitud", "type": "main", "index": 0 }]] },
+    "Validar Solicitud": { "main": [[{ "node": "Switch (mode)", "type": "main", "index": 0 }]] },
+    "Switch (mode)": {
+      "main": [
+        [{ "node": "Ejecutar: Generador de Plantilla", "type": "main", "index": 0 }],
+        [{ "node": "Ejecutar: Cargador Masivo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ejecutar: Generador de Plantilla": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] },
+    "Ejecutar: Cargador Masivo": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

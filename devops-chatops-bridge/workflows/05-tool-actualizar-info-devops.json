@@ -1,0 +1,198 @@
+{
+  "updatedAt": "2025-11-19T21:05:46.953Z",
+  "createdAt": "2025-10-16T13:14:18.609Z",
+  "id": "uceTXzshFieie9dl",
+  "name": "WH-TOOL-ACTUALIZAR-INFO-DEVOPS",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-app.azurewebsites.example:443/api/LG_MODIFICAR_CASO_DEVOPS_CON_N8N/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=YOUR_SAS_SIGNATURE",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"Estado\":\"{{ $json.Estado }}\",\n  \"CasoID\":\"{{ $json.CasoID }}\",\n  \"AssignedTo\":\"{{ $json.AssignedTo }}\"\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        80
+      ],
+      "id": "d589f46e-6321-42bb-a5e4-80b15c7d5bd3",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -64,
+        80
+      ],
+      "id": "3aed234e-45d3-42d7-a518-544203bbf059",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Function\n * Toma cada item con `json.query` (string JSON, objeto o array) y\n * emite 1 item por registro con:\n *   - JSON: el objeto original (stringificado) con { Estado, CasoID, AssignedTo }\n *   - nombre: etiqueta \"<CasoID>-<Estado>\"\n *\n * Entrada ejemplo:\n * [\n *   {\n *     \"query\": \"[\\n  {\\n    \\\"Estado\\\": \\\"Done\\\",\\n    \\\"CasoID\\\": \\\"28365\\\",\\n    \\\"AssignedTo\\\": \\\"Alberto José Duque Gómez <alberto.duque@yourcompany.example>\\\"\\n  }\\n]\"\n *   }\n * ]\n */\n\nfunction parseQuery(q) {\n  if (q == null) return [];\n  if (Array.isArray(q)) return q;                 // ya es array\n  if (typeof q === 'object') return [q];          // objeto único\n\n  // Si viene como string -> intentar parsear\n  if (typeof q === 'string') {\n    const s = q.trim();\n    try {\n      const parsed = JSON.parse(s);\n      if (Array.isArray(parsed)) return parsed;\n      if (typeof parsed === 'object' && parsed) return [parsed];\n    } catch (e) {\n      // Intento de parseo \"relajado\": quitar comas colgantes\n      const relaxed = s.replace(/,\\s*]/g, ']').replace(/,\\s*}/g, '}');\n      try {\n        const parsed2 = JSON.parse(relaxed);\n        if (Array.isArray(parsed2)) return parsed2;\n        if (typeof parsed2 === 'object' && parsed2) return [parsed2];\n      } catch { /* vacío */ }\n    }\n  }\n  return [];\n}\n\nfunction toStringSafe(obj) {\n  if (typeof obj === 'string') return obj;\n  try { return JSON.stringify(obj); } catch { return String(obj); }\n}\n\nconst out = [];\n\nfor (const item of items) {\n  const lista = parseQuery(item.json?.query);\n\n  for (const e of lista) {\n    // Normalizaciones mínimas\n    const Estado      = (e?.Estado ?? '').toString().trim();\n    const CasoID      = (e?.CasoID ?? '').toString().trim();\n    const AssignedTo  = (e?.AssignedTo ?? '').toString().trim();\n\n    // Ensamblar objeto limpio SOLO con los campos requeridos\n    const registro = { Estado, CasoID, AssignedTo };\n\n    // Etiqueta \"nombre\": <ID>-<Estado>\n    const nombre = [\n      CasoID || 'SINID',\n      Estado || 'ESTADO'\n    ].join('-');\n\n    out.push({\n      json: {\n        JSON: toStringSafe(registro),\n        nombre\n      }\n    });\n  }\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        80
+      ],
+      "id": "463d6926-c480-4409-a8c2-106b7948b7bc",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d8befc6e-98ad-4534-9818-0afb6562446d",
+              "name": "Estado",
+              "value": "={{ $('Code').item.json.JSON.parseJson().Estado }}",
+              "type": "string"
+            },
+            {
+              "id": "47e48c1e-e90a-4c26-b4ab-45f11ba9cf50",
+              "name": "CasoID",
+              "value": "={{ $('Code').item.json.JSON.parseJson().CasoID }}",
+              "type": "string"
+            },
+            {
+              "id": "bdf9e36a-a627-44cf-a966-5426590a5bae",
+              "name": "AssignedTo",
+              "value": "={{ $('Code').item.json.JSON.parseJson().AssignedTo }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        80
+      ],
+      "id": "799a3f8b-573a-4980-8247-b97d01c3c35f",
+      "name": "SetVariable"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "SetVariable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SetVariable": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "query": "[\n  {\n    \"Estado\": \"Done\",\n    \"CasoID\": \"28365\",\n    \"AssignedTo\": \"Alberto José Duque Gómez <alberto.duque@yourcompany.example>\"\n  }\n]"
+        }
+      }
+    ]
+  },
+  "versionId": "2b3dbe48-522b-48d2-be74-7a46e778eb3d",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-10-16T13:14:18.609Z",
+      "createdAt": "2025-10-16T13:14:18.609Z",
+      "role": "workflow:owner",
+      "workflowId": "uceTXzshFieie9dl",
+      "projectId": "fTnylytOq7y7H3Px",
+      "project": {
+        "updatedAt": "2025-09-30T22:49:25.479Z",
+        "createdAt": "2025-09-30T22:45:44.786Z",
+        "id": "fTnylytOq7y7H3Px",
+        "name": "Alberto José Duque Gómez <alberto.duque@yourcompany.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-09-30T22:45:44.786Z",
+            "createdAt": "2025-09-30T22:45:44.786Z",
+            "userId": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+            "projectId": "fTnylytOq7y7H3Px",
+            "user": {
+              "updatedAt": "2026-08-11T21:46:31.645Z",
+              "createdAt": "2025-09-30T22:45:43.378Z",
+              "id": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+              "email": "alberto.duque@yourcompany.example",
+              "firstName": "Alberto José",
+              "lastName": "Duque Gómez",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-09-30T22:49:28.564Z",
+                "personalization_survey_n8n_version": "1.107.0"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "MxeXP185zMU9ZFde",
+                "userActivatedAt": 1759325657829,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1781033800351
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-08-11",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

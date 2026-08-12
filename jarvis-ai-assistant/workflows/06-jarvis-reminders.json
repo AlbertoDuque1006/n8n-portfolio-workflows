@@ -1,0 +1,366 @@
+{
+  "updatedAt": "2026-07-07T23:10:16.104Z",
+  "createdAt": "2026-06-08T14:33:42.441Z",
+  "id": "crdXMsCs52rRZUxJ",
+  "name": "JARVIS_REMINDERS",
+  "description": "JARVIS scheduled reminder sender: polls every minute for due reminders in Postgres, formats them in Spanish, sends via Telegram bot, and marks as sent. Handles per-item processing so multiple simultaneous reminders each get their own message.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "64f83d02-b3fd-40a8-ae85-7dba232c165a",
+      "name": "Cada Minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT r.id, r.title, r.description, r.remind_at, r.recurrence, u.telegram_chat_id FROM jarvis_reminders r JOIN jarvis_users u ON r.user_id = u.id WHERE r.status = 'pending' AND r.remind_at <= NOW() ORDER BY r.remind_at ASC LIMIT 50",
+        "options": {}
+      },
+      "id": "8123c850-664a-4dfb-871b-ac0532a255d8",
+      "name": "Query Pending Reminders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $json;\nconst d = new Date(r.remind_at);\nlet dateStr;\ntry { dateStr = d.toLocaleString('es-CO', { timeZone: 'America/Bogota', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch(e) { dateStr = r.remind_at; }\nlet text = '⏰ *Recordatorio*\\n';\ntext += r.title || 'Sin título';\nif (r.description && r.description.trim()) text += '\\n_' + r.description.trim() + '_';\ntext += '\\n\\n🕒 ' + dateStr;\nreturn { json: { reminderId: r.id, chatId: r.telegram_chat_id, recurrence: r.recurrence || 'none', messageText: text } };"
+      },
+      "id": "8f01f0c5-dfff-47f7-847b-623841315bf5",
+      "name": "Formatear Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.messageText }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "cef50943-061b-43cb-879b-9818bbfa4819",
+      "name": "Enviar Recordatorio Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "webhookId": "2ac76875-3761-45f0-9151-b764bf9df271",
+      "credentials": {
+        "telegramApi": {
+          "id": "LpX5kW8pTmulcQSn",
+          "name": "JARVIS - DAVID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE jarvis_reminders SET status = 'sent', updated_at = NOW() WHERE id = {{ $('Formatear Mensaje').item.json.reminderId }} RETURNING id, title",
+        "options": {}
+      },
+      "id": "d0d9f3c1-b7a6-4d7a-940b-014023602274",
+      "name": "Marcar Enviado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        896,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada Minuto": {
+      "main": [
+        [
+          {
+            "node": "Query Pending Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Pending Reminders": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Enviar Recordatorio Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Recordatorio Telegram": {
+      "main": [
+        [
+          {
+            "node": "Marcar Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:Cada Minuto": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "73bb1fed-45be-4637-865f-2410ad761d24",
+  "activeVersionId": "7ded7faa-4ffb-47de-b7c3-23ccaf67e9af",
+  "versionCounter": 4,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-08T14:33:42.473Z",
+      "createdAt": "2026-06-08T14:33:42.473Z",
+      "role": "workflow:owner",
+      "workflowId": "crdXMsCs52rRZUxJ",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-09T00:13:13.609Z",
+    "createdAt": "2026-06-09T00:13:13.609Z",
+    "versionId": "7ded7faa-4ffb-47de-b7c3-23ccaf67e9af",
+    "workflowId": "crdXMsCs52rRZUxJ",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 1
+              }
+            ]
+          }
+        },
+        "id": "64f83d02-b3fd-40a8-ae85-7dba232c165a",
+        "name": "Cada Minuto",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT r.id, r.title, r.description, r.remind_at, r.recurrence, u.telegram_chat_id FROM jarvis_reminders r JOIN jarvis_users u ON r.user_id = u.id WHERE r.status = 'pending' AND r.remind_at <= NOW() ORDER BY r.remind_at ASC LIMIT 50",
+          "options": {}
+        },
+        "id": "8123c850-664a-4dfb-871b-ac0532a255d8",
+        "name": "Query Pending Reminders",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          224,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const r = $json;\nconst d = new Date(r.remind_at);\nlet dateStr;\ntry { dateStr = d.toLocaleString('es-CO', { timeZone: 'America/Bogota', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch(e) { dateStr = r.remind_at; }\nlet text = '⏰ *Recordatorio*\\n';\ntext += r.title || 'Sin título';\nif (r.description && r.description.trim()) text += '\\n_' + r.description.trim() + '_';\ntext += '\\n\\n🕒 ' + dateStr;\nreturn { json: { reminderId: r.id, chatId: r.telegram_chat_id, recurrence: r.recurrence || 'none', messageText: text } };"
+        },
+        "id": "8f01f0c5-dfff-47f7-847b-623841315bf5",
+        "name": "Formatear Mensaje",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          448,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $json.chatId }}",
+          "text": "={{ $json.messageText }}",
+          "additionalFields": {
+            "parse_mode": "Markdown"
+          }
+        },
+        "id": "cef50943-061b-43cb-879b-9818bbfa4819",
+        "name": "Enviar Recordatorio Telegram",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          672,
+          0
+        ],
+        "webhookId": "2ac76875-3761-45f0-9151-b764bf9df271",
+        "credentials": {
+          "telegramApi": {
+            "id": "LpX5kW8pTmulcQSn",
+            "name": "JARVIS - DAVID"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE jarvis_reminders SET status = 'sent', updated_at = NOW() WHERE id = {{ $('Formatear Mensaje').item.json.reminderId }} RETURNING id, title",
+          "options": {}
+        },
+        "id": "d0d9f3c1-b7a6-4d7a-940b-014023602274",
+        "name": "Marcar Enviado",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          896,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Cada Minuto": {
+        "main": [
+          [
+            {
+              "node": "Query Pending Reminders",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Query Pending Reminders": {
+        "main": [
+          [
+            {
+              "node": "Formatear Mensaje",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Formatear Mensaje": {
+        "main": [
+          [
+            {
+              "node": "Enviar Recordatorio Telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Enviar Recordatorio Telegram": {
+        "main": [
+          [
+            {
+              "node": "Marcar Enviado",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "David Tenorio Cruz",
+    "name": null,
+    "description": null,
+    "autosaved": true,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-09T00:17:07.160Z",
+        "id": 76,
+        "workflowId": "crdXMsCs52rRZUxJ",
+        "versionId": "7ded7faa-4ffb-47de-b7c3-23ccaf67e9af",
+        "event": "activated",
+        "userId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    ]
+  }
+}

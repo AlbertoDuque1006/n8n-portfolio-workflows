@@ -1,0 +1,91 @@
+{
+  "updatedAt": "2026-06-09T00:22:28.000Z",
+  "createdAt": "2026-06-09T00:22:18.666Z",
+  "id": "s1rvlsBDl13A7VUx",
+  "name": "JARVIS - Util: Insertar Usuario",
+  "description": "Workflow temporal para registrar el usuario de David en jarvis_users.",
+  "active": false,
+  "isArchived": true,
+  "nodes": [
+    {
+      "id": "ecb32b9b-96dc-470b-b082-63e2cb8fd3bd",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "8af0cd1c-e8a4-468c-8f7f-a26b0746b298",
+      "name": "Insertar Usuario JARVIS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO jarvis_users (telegram_user_id, telegram_chat_id, username, first_name, is_active) VALUES (7595026461, 7595026461, 'david', 'David', TRUE) ON CONFLICT (telegram_user_id) DO UPDATE SET telegram_chat_id = 7595026461, is_active = TRUE, last_seen_at = NOW() RETURNING id, telegram_user_id, telegram_chat_id, first_name, is_active"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Insertar Usuario JARVIS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "fc85b2c3-e9cf-49ea-b938-51abab577dde",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-06-09T00:22:18.668Z",
+      "createdAt": "2026-06-09T00:22:18.668Z",
+      "role": "workflow:owner",
+      "workflowId": "s1rvlsBDl13A7VUx",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}
