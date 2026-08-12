@@ -1,0 +1,223 @@
+{
+  "updatedAt": "2026-02-04T13:29:38.060Z",
+  "createdAt": "2025-10-01T13:06:17.703Z",
+  "id": "MxeXP185zMU9ZFde",
+  "name": "WH-FLOW-MANDAR_FILE_JSON",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a339ea28-f3fb-47a7-8f06-ca81bd4212c9",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3f1db492-4c19-4e08-95e1-9869754a09f7",
+              "name": "JSON-file",
+              "value": "={{ $json.JSON }}",
+              "type": "string"
+            },
+            {
+              "id": "5f79d12b-d584-4e15-837f-f1b2690c0a3c",
+              "name": "Nombre del archivo",
+              "value": "={{ $json.nombre }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        432,
+        0
+      ],
+      "id": "76bf3f81-80b3-4c1d-8b25-77a128016433",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "binaryPropertyName": "File",
+        "options": {
+          "format": true,
+          "fileName": "={{ $json['Nombre del archivo'] }}"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        608,
+        0
+      ],
+      "id": "4990c5b2-5966-4bca-89e5-5daef58b9aab",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-app.azurewebsites.example:443/api/LG-N8N-TEST-RESPONSE-FILE/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=YOUR_SAS_SIGNATURE",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "File"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        848,
+        -144
+      ],
+      "id": "a0f370da-7883-4629-bc0e-285bcb82d16b",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n \"Function\" node\n// Entrada esperada por item: { query: \"<string JSON como el que enviaste>\" }\n// Salida por item: { JSON: \"<string con el JSON interno>\", nombre: \"<nombre del archivo>\" }\n\nconst out = [];\n\nfor (const item of items) {\n  const q = item.json.query;\n  if (!q) continue;\n\n  // La propiedad `query` puede venir como string (lo más común) o ya como objeto/array\n  const lista = typeof q === 'string' ? JSON.parse(q)\n              : Array.isArray(q)       ? q\n              : [q];\n\n  for (const e of lista) {\n    // Aseguramos que JSON sea string\n    let contenido = e?.JSON;\n    if (typeof contenido !== 'string') {\n      try { contenido = JSON.stringify(contenido); } catch { contenido = String(contenido); }\n    }\n\n    out.push({\n      json: {\n        JSON: contenido,\n        nombre: e?.nombre ?? ''\n      }\n    });\n  }\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "af54ee04-8b3a-4fa1-90e6-3e9842b375ee",
+      "name": "Code"
+    }
+  ],
+  "connections": {
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        []
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "query": "[{\"JSON\": \"[{\\\"idIngreso\\\": 24545, \\\"idEntidad\\\": 13, \\\"idSede\\\": 5, \\\"noIngreso\\\": 1634, \\\"fechaIngreso\\\": \\\"2025-01-12T19:20:00.000Z\\\", \\\"idUsuarioPaciente\\\": 80986, \\\"idUsuarioMedico\\\": 44038, \\\"idTipoAtencion\\\": 2, \\\"idServicioIngreso\\\": 303, \\\"idUbicacionIngreso\\\": 10, \\\"idServicioEgreso\\\": 303, \\\"idUbicacionEgreso\\\": 16, \\\"idUsuarioEgresa\\\": 5029, \\\"idDestinoRemision\\\": 1, \\\"idCiudadRemision\\\": null, \\\"fechaEgreso\\\": \\\"2025-01-13T20:11:00.000Z\\\", \\\"idUbicacionActual\\\": 16, \\\"idCamaActual\\\": null, \\\"idZona\\\": 22, \\\"idCausaIngreso\\\": 93, \\\"idEventoCatastrofico\\\": 0, \\\"idAccidente\\\": 0, \\\"idPreingreso\\\": 0, \\\"idEstadoEgreso\\\": 1, \\\"idTriage\\\": 14663, \\\"fechaRegistro\\\": \\\"2025-01-12T19:22:00.000Z\\\", \\\"idUsuarioCreacion\\\": 2030, \\\"observacionesIngreso\\\": \\\"14229-36203623  Bonos Requeridos\\\\t2\\\\nValor Bono\\\\t28100\\\\nTotal Bonos\\\\t56200\\\", \\\"responsableNombre\\\": \\\"NO PTE\\\", \\\"responsableTelefono\\\": \\\"0\\\", \\\"responsableParentesco\\\": 1833, \\\"AcompañanteNombre\\\": \\\"\\\", \\\"AcompañanteTelefono\\\": \\\"\\\", \\\"indHabilitado\\\": true, \\\"indIngresoAbierto\\\": false, \\\"indVentasAbiertas\\\": false, \\\"indReingreso\\\": false, \\\"indInicioEgreso\\\": true, \\\"indEgresoAsistencial\\\": true, \\\"idTipoPlanDomiciliario\\\": null, \\\"indIngresoAtendido\\\": true, \\\"idTipoAtencionEgreso\\\": 2, \\\"diasPlanDomiciliario\\\": 0, \\\"idUbicDetalle\\\": 0, \\\"ResponsableDocumento\\\": \\\"0\\\", \\\"CuidadorNombre\\\": null, \\\"CuidadorTelefono\\\": null, \\\"CuidadorParentesco\\\": null, \\\"CuidadorDocumento\\\": null, \\\"indCirugia\\\": false, \\\"indConsultaIngreso\\\": true, \\\"indAtendido\\\": true, \\\"idUsuarioEgresaAsistencial\\\": null, \\\"idCiudadIngreso\\\": 243, \\\"indPacienteRemitido\\\": false, \\\"idIngresoVinculado\\\": null, \\\"fechaEgresoAsistencial\\\": null, \\\"indResLaboratorios\\\": false, \\\"idDiagnosticoIngreso\\\": null, \\\"fechaActivacion\\\": \\\"2025-01-20T15:10:16.150Z\\\", \\\"idUsuarioActivacion\\\": 5029, \\\"indOcupacional\\\": null, \\\"idAptoTrasplante\\\": 0, \\\"IdTipoTrasplante\\\": 0, \\\"idTipoDocumentoResponsable\\\": 1, \\\"idAcompananteParentesco\\\": 1833, \\\"AnioIngresoCmp\\\": 2025, \\\"MesIngresoCmp\\\": 1, \\\"DiaIngresoCmp\\\": 12, \\\"FotoUrl\\\": \\\"/Imagenes/imagenes/imagenSilueta.jpg\\\", \\\"IdViaDeIngreso\\\": 2, \\\"IdDestinoEgresoAsistencial\\\": 0, \\\"IdRemision\\\": 0, \\\"IndPendienteActualizarDatos\\\": false}]\", \"nombre\": \"resultado_consulta_idIngreso_24545.json\"}]"
+        }
+      }
+    ]
+  },
+  "versionId": "04d67958-246c-4c5b-ab61-b45c0c8f7f95",
+  "activeVersionId": null,
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-10-01T13:06:17.703Z",
+      "createdAt": "2025-10-01T13:06:17.703Z",
+      "role": "workflow:owner",
+      "workflowId": "MxeXP185zMU9ZFde",
+      "projectId": "fTnylytOq7y7H3Px",
+      "project": {
+        "updatedAt": "2025-09-30T22:49:25.479Z",
+        "createdAt": "2025-09-30T22:45:44.786Z",
+        "id": "fTnylytOq7y7H3Px",
+        "name": "Alberto José Duque Gómez <alberto.duque@yourcompany.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-09-30T22:45:44.786Z",
+            "createdAt": "2025-09-30T22:45:44.786Z",
+            "userId": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+            "projectId": "fTnylytOq7y7H3Px",
+            "user": {
+              "updatedAt": "2026-08-11T21:46:31.645Z",
+              "createdAt": "2025-09-30T22:45:43.378Z",
+              "id": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+              "email": "alberto.duque@yourcompany.example",
+              "firstName": "Alberto José",
+              "lastName": "Duque Gómez",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-09-30T22:49:28.564Z",
+                "personalization_survey_n8n_version": "1.107.0"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "MxeXP185zMU9ZFde",
+                "userActivatedAt": 1759325657829,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1781033800351
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-08-11",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

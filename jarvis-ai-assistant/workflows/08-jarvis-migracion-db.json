@@ -1,0 +1,153 @@
+{
+  "updatedAt": "2026-06-09T00:04:52.021Z",
+  "createdAt": "2026-06-08T14:17:56.752Z",
+  "id": "AX2jWqLBvDmfWCuH",
+  "name": "JARVIS - 00 Migracion DB",
+  "description": "Workflow de migración one-shot: crea todas las tablas y datos iniciales de JARVIS en PostgreSQL.",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "9f8557c8-44fc-4230-955f-774cbae9157c",
+      "name": "Iniciar Migracion",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b8a24937-929a-4299-9d27-7ce6ce46fdd4",
+      "name": "Crear Tablas JARVIS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS jarvis_config (key VARCHAR(100) PRIMARY KEY, value TEXT NOT NULL, description TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_users (id SERIAL PRIMARY KEY, telegram_user_id BIGINT UNIQUE NOT NULL, telegram_chat_id BIGINT NOT NULL, username VARCHAR(100), first_name VARCHAR(100), is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMPTZ DEFAULT NOW(), last_seen_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_conversations (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES jarvis_users(id), telegram_chat_id BIGINT NOT NULL, role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')), content TEXT NOT NULL, content_type VARCHAR(30) DEFAULT 'text', metadata JSONB DEFAULT '{}', fragment_count INTEGER DEFAULT 1, tokens_used INTEGER, created_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_reminders (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES jarvis_users(id), title TEXT NOT NULL, description TEXT, remind_at TIMESTAMPTZ NOT NULL, recurrence VARCHAR(50), recurrence_config JSONB DEFAULT '{}', status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'cancelled', 'snoozed')), sent_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_events (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES jarvis_users(id), title TEXT NOT NULL, description TEXT, location TEXT, start_at TIMESTAMPTZ NOT NULL, end_at TIMESTAMPTZ, all_day BOOLEAN DEFAULT FALSE, status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'cancelled', 'completed')), source VARCHAR(50) DEFAULT 'jarvis', external_id VARCHAR(200), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_action_log (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES jarvis_users(id), action_type VARCHAR(50) NOT NULL, action_payload JSONB NOT NULL, result VARCHAR(20) CHECK (result IN ('success', 'error', 'pending')), result_detail TEXT, executed_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_devices (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, alias VARCHAR(100), device_type VARCHAR(50), integration VARCHAR(50) DEFAULT 'shelly', local_ip VARCHAR(45), device_id VARCHAR(200), channel INTEGER DEFAULT 0, room VARCHAR(100), is_active BOOLEAN DEFAULT TRUE, last_state JSONB DEFAULT '{}', last_seen_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_error_log (id SERIAL PRIMARY KEY, workflow_name VARCHAR(100), error_type VARCHAR(100), error_message TEXT, error_stack TEXT, context JSONB DEFAULT '{}', resolved BOOLEAN DEFAULT FALSE, created_at TIMESTAMPTZ DEFAULT NOW()); CREATE TABLE IF NOT EXISTS jarvis_workflow_runs (id SERIAL PRIMARY KEY, workflow_name VARCHAR(100), trigger_type VARCHAR(50), status VARCHAR(20) CHECK (status IN ('success', 'error', 'partial')), messages_processed INTEGER DEFAULT 0, duration_ms INTEGER, created_at TIMESTAMPTZ DEFAULT NOW()); CREATE INDEX IF NOT EXISTS idx_conversations_user_created ON jarvis_conversations(user_id, created_at DESC); CREATE INDEX IF NOT EXISTS idx_reminders_remind_at ON jarvis_reminders(remind_at) WHERE status = 'pending'; CREATE INDEX IF NOT EXISTS idx_events_start_at ON jarvis_events(start_at) WHERE status = 'scheduled'; CREATE INDEX IF NOT EXISTS idx_action_log_user ON jarvis_action_log(user_id, executed_at DESC);"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "dfcbcb02-f37b-464a-b560-e3ae5617d2cf",
+      "name": "Insertar Config Inicial",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO jarvis_config (key, value, description) VALUES ('BUFFER_TTL_TEXT', '5', 'Segundos de espera texto'), ('BUFFER_TTL_PHOTO', '15', 'Segundos de espera foto'), ('MAX_FRAGMENTS_PER_BUFFER', '20', 'Maximo fragmentos por buffer'), ('MAX_BUFFER_SIZE_BYTES', '50000', 'Tamano maximo buffer bytes'), ('JARVIS_ADMIN_CHAT_ID', '', 'Chat ID administrador alertas'), ('JARVIS_WELCOME_CODE', 'REPLACE_WITH_YOUR_OWN_CODE, 'Codigo secreto registro usuarios'), ('TELEGRAM_BOT_USERNAME', '', 'Username bot Telegram sin arroba') ON CONFLICT (key) DO NOTHING;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "051e403f-f4a7-4049-952d-b8a670a3312f",
+      "name": "Verificar Tablas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'jarvis_%' ORDER BY table_name;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Iniciar Migracion": {
+      "main": [
+        [
+          {
+            "node": "Crear Tablas JARVIS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Tablas JARVIS": {
+      "main": [
+        [
+          {
+            "node": "Insertar Config Inicial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insertar Config Inicial": {
+      "main": [
+        [
+          {
+            "node": "Verificar Tablas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "c1a864f1-671e-41d5-8405-6f8e64b474d9",
+  "activeVersionId": null,
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-06-08T14:17:56.758Z",
+      "createdAt": "2026-06-08T14:17:56.758Z",
+      "role": "workflow:owner",
+      "workflowId": "AX2jWqLBvDmfWCuH",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

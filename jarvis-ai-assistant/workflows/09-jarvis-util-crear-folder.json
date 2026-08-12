@@ -1,0 +1,93 @@
+{
+  "updatedAt": "2026-06-08T23:58:57.000Z",
+  "createdAt": "2026-06-08T23:56:14.318Z",
+  "id": "8ZFSNjl8qVO0iRlJ",
+  "name": "JARVIS - Util: Crear Folder",
+  "description": "Workflow auxiliar temporal para crear el folder AGENTE - JARVIS via REST API interna de n8n.",
+  "active": false,
+  "isArchived": true,
+  "nodes": [
+    {
+      "id": "71b8faad-901b-4a1a-a477-b7af0fe800a1",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "48864cb8-de2d-42b5-8f92-f079ac0551dd",
+      "name": "Crear Folder AGENTE JARVIS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/api/v1/folders",
+        "sendHeaders": false,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{ \"name\": \"AGENTE - JARVIS\" }"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Crear Folder AGENTE JARVIS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "664fd9a9-e163-49ad-96a6-df4e18a3dcf2",
+  "activeVersionId": null,
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-06-08T23:56:14.320Z",
+      "createdAt": "2026-06-08T23:56:14.320Z",
+      "role": "workflow:owner",
+      "workflowId": "8ZFSNjl8qVO0iRlJ",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

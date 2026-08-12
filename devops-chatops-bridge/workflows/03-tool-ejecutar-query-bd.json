@@ -1,0 +1,641 @@
+{
+  "updatedAt": "2025-11-28T20:15:28.748Z",
+  "createdAt": "2025-10-01T13:07:12.987Z",
+  "id": "U11GRfelYoEkLCDY",
+  "name": "WH-TOOL-EJECUTAR_QUERY_BD",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "26ecbb57-24d7-40f2-a041-71e33446e147",
+      "typeVersion": 1.1,
+      "name": "When Executed by Another Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -368,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2280757c-4278-41b7-8007-e13c6123c1ec",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        -416
+      ],
+      "id": "8f0e7b01-b7d1-46d1-94e8-9f9c3a4af79e",
+      "name": "Mensaje de error"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Function\n * Entrada esperada por item:\n * {\n *   \"query\": \"[{ \\\"QUERY\\\": \\\"SELECT ...;\\\", \\\"BD\\\": \\\"CienoGroup\\\" }]\"\n * }\n *\n * Comportamiento:\n * - Acepta `json.query` como string JSON, objeto o array.\n * - Emite 1 item por registro con:\n *     - JSON: el objeto { QUERY, BD } stringificado\n *     - sql:  QUERY en texto plano\n *     - bd:   nombre de la base de datos\n *     - nombre: etiqueta útil \"<BD>-<OPERACION>\"\n */\n\nfunction parseQuery(q) {\n  if (q == null) return [];\n  if (Array.isArray(q)) return q;          // ya es array\n  if (typeof q === 'object') return [q];   // es objeto\n\n  if (typeof q === 'string') {\n    const s = q.trim();\n    try {\n      const parsed = JSON.parse(s);\n      if (Array.isArray(parsed)) return parsed;\n      if (parsed && typeof parsed === 'object') return [parsed];\n    } catch {\n      // parseo relajado (quita comas colgantes típicas)\n      const relaxed = s.replace(/,\\s*]/g, ']').replace(/,\\s*}/g, '}');\n      try {\n        const parsed2 = JSON.parse(relaxed);\n        if (Array.isArray(parsed2)) return parsed2;\n        if (parsed2 && typeof parsed2 === 'object') return [parsed2];\n      } catch {\n        return [];\n      }\n    }\n  }\n  return [];\n}\n\nfunction toStringSafe(obj) {\n  if (typeof obj === 'string') return obj;\n  try { return JSON.stringify(obj); } catch { return String(obj); }\n}\n\nfunction inferOp(sql) {\n  const first = (sql || '').trim().split(/\\s+/)[0]?.toUpperCase() || '';\n  if (/^(SELECT|WITH)$/.test(first)) return 'SELECT';\n  if (/^INSERT$/.test(first)) return 'INSERT';\n  if (/^UPDATE$/.test(first)) return 'UPDATE';\n  if (/^DELETE$/.test(first)) return 'DELETE';\n  if (/^MERGE$/.test(first))  return 'MERGE';\n  if (/^(EXEC|EXECUTE|SP_EXECUTESQL)$/.test(first)) return 'EXEC';\n  if (/^ALTER$/.test(first))  return 'ALTER';\n  if (/^CREATE$/.test(first)) return 'CREATE';\n  if (/^DROP$/.test(first))   return 'DROP';\n  return first || 'SQL';\n}\n\nconst out = [];\n\nfor (const item of items) {\n  const lista = parseQuery(item.json?.query);\n\n  for (const e of lista) {\n    // Normalizar campos esperados\n    const sql = (e?.QUERY ?? '').toString().trim();\n    const bd  = (e?.BD ?? '').toString().trim();\n\n    const op = inferOp(sql);\n    const nombre = [bd || 'SINBD', op].join('-');\n\n    // Solo emitimos si hay al menos SQL o BD\n    if (!sql && !bd) continue;\n\n    const registro = { QUERY: sql, BD: bd };\n\n    out.push({\n      json: {\n        JSON: toStringSafe(registro),\n        sql,\n        bd,\n        nombre\n      }\n    });\n  }\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -32
+      ],
+      "id": "0fcf93d5-8661-4539-ae7b-c42ee35e997c",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a43acee2-5aa7-4739-9608-73962e4458eb",
+              "name": "Query",
+              "value": "={{$('Code').item.json.JSON.parseJson().QUERY}}",
+              "type": "string"
+            },
+            {
+              "id": "562e8b21-68b4-4f01-831c-8c147443e467",
+              "name": "Base de datos",
+              "value": "={{$('Code').item.json.JSON.parseJson().BD}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        16,
+        -32
+      ],
+      "id": "8fbb9206-5668-4df6-9c55-5b1f336c2f5c",
+      "name": "SetVariable"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "=CienoGroup",
+                    "rightValue": "={{ $json[\"Base de datos\"] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ef06d5c3-f1b6-4490-a927-2f832adabd79"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "CienoGroup"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c32e55a2-8fc8-4944-ad87-86434275ae06",
+                    "leftValue": "AXA",
+                    "rightValue": "={{ $json[\"Base de datos\"] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "AXA"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "d0d6d9a2-0aee-4df4-8c82-43da2f4b56b2",
+                    "leftValue": "OCC",
+                    "rightValue": "={{ $json[\"Base de datos\"] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "OCC"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "aebac342-bd3b-4bcf-99b2-b26c7ce7d3c4",
+                    "leftValue": "Norte",
+                    "rightValue": "={{ $json[\"Base de datos\"] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Norte"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fd9c43c7-de61-4b10-a2d1-7aba4ec2420a",
+                    "leftValue": "Oriente",
+                    "rightValue": "={{ $json[\"Base de datos\"] }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Oriente"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        208,
+        -48
+      ],
+      "id": "ee43b76e-e3da-4dc6-acae-9c60c1f4c84a",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.Query }}"
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        -432
+      ],
+      "id": "da5b0a00-1004-40a3-b0ba-536dad2c53bd",
+      "name": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup",
+      "alwaysOutputData": false,
+      "credentials": {
+        "microsoftSql": {
+          "id": "L1L5VilGb00m5V77",
+          "name": "Microsoft SQL account - gsh-gshoqr-db.database.windows.net - DB: iMedicalCienoGroup_Copy_CienoGroup"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2280757c-4278-41b7-8007-e13c6123c1ec",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        -288
+      ],
+      "id": "3f940ca7-4058-4916-bea6-1b2e0daad9ef",
+      "name": "Mensaje de error1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.Query }}"
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        -304
+      ],
+      "id": "934265ea-3de9-4c63-82de-75af8c6af76e",
+      "name": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup1",
+      "alwaysOutputData": false,
+      "credentials": {
+        "microsoftSql": {
+          "id": "L1L5VilGb00m5V77",
+          "name": "Microsoft SQL account - gsh-gshoqr-db.database.windows.net - DB: iMedicalCienoGroup_Copy_CienoGroup"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2280757c-4278-41b7-8007-e13c6123c1ec",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        -176
+      ],
+      "id": "bcab2e20-3499-4e4c-a2fb-7a1bbc7526c3",
+      "name": "Mensaje de error2"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.Query }}"
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        -192
+      ],
+      "id": "eb148fd6-d09b-4123-b3df-3c4d6c3b3011",
+      "name": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup2",
+      "alwaysOutputData": false,
+      "credentials": {
+        "microsoftSql": {
+          "id": "L1L5VilGb00m5V77",
+          "name": "Microsoft SQL account - gsh-gshoqr-db.database.windows.net - DB: iMedicalCienoGroup_Copy_CienoGroup"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2280757c-4278-41b7-8007-e13c6123c1ec",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        688,
+        80
+      ],
+      "id": "6c55c5d4-8bf8-4e78-ae45-e67ad5e3e686",
+      "name": "Mensaje de error3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2280757c-4278-41b7-8007-e13c6123c1ec",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        688,
+        -48
+      ],
+      "id": "97fbfd52-e7b6-45d4-9cac-7e54f97eae46",
+      "name": "Mensaje de error4"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.Query }}"
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        -64
+      ],
+      "id": "4e459155-bf20-48cc-92c7-05b4414f89d3",
+      "name": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup3",
+      "alwaysOutputData": false,
+      "credentials": {
+        "microsoftSql": {
+          "id": "0Nuc7ypg1ZpFZfQZ",
+          "name": "Microsoft SQL account - gsh-gshoqr-db.database.windows.net - DB: iMedicalNorte_Test"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.Query }}"
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        64
+      ],
+      "id": "f70f7145-f4b6-49c2-857c-28f3e1ed0361",
+      "name": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup4",
+      "alwaysOutputData": false,
+      "credentials": {
+        "microsoftSql": {
+          "id": "dYNRUVPYqo67MXHZ",
+          "name": "Microsoft SQL account - gsh-gshoqr-db.database.windows.net - DB: iMedicalOriente_Test"
+        }
+      },
+      "onError": "continueErrorOutput"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "SetVariable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SetVariable": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mensaje de error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mensaje de error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mensaje de error2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup3": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mensaje de error4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Microsoft SQL - iMedicalCienoGroup_Copy_CienoGroup4": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Mensaje de error3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "query": "[\n  {\n    \"QUERY\": \"select idIngreso, idCausaIngreso, idServicioIngreso\\nfrom iIngresos\\nwhere idIngreso in (24545, 979622);\",\n    \"BD\": \"AXA\"\n  }\n]"
+        }
+      }
+    ]
+  },
+  "versionId": "c1452631-5a52-4277-a4dd-e546012dc771",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-10-01T13:07:12.987Z",
+      "createdAt": "2025-10-01T13:07:12.987Z",
+      "role": "workflow:owner",
+      "workflowId": "U11GRfelYoEkLCDY",
+      "projectId": "fTnylytOq7y7H3Px",
+      "project": {
+        "updatedAt": "2025-09-30T22:49:25.479Z",
+        "createdAt": "2025-09-30T22:45:44.786Z",
+        "id": "fTnylytOq7y7H3Px",
+        "name": "Alberto José Duque Gómez <alberto.duque@yourcompany.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-09-30T22:45:44.786Z",
+            "createdAt": "2025-09-30T22:45:44.786Z",
+            "userId": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+            "projectId": "fTnylytOq7y7H3Px",
+            "user": {
+              "updatedAt": "2026-08-11T21:46:31.645Z",
+              "createdAt": "2025-09-30T22:45:43.378Z",
+              "id": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+              "email": "alberto.duque@yourcompany.example",
+              "firstName": "Alberto José",
+              "lastName": "Duque Gómez",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-09-30T22:49:28.564Z",
+                "personalization_survey_n8n_version": "1.107.0"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "MxeXP185zMU9ZFde",
+                "userActivatedAt": 1759325657829,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1781033800351
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-08-11",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

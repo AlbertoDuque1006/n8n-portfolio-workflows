@@ -1,0 +1,669 @@
+{
+  "updatedAt": "2026-06-09T01:02:56.136Z",
+  "createdAt": "2026-06-09T00:56:34.928Z",
+  "id": "LS9cBlhiyl37UTBk",
+  "name": "JARVIS_CALENDAR",
+  "description": "JARVIS Google Calendar: recibe action=create o action=query desde JARVIS_ROUTER, crea o consulta eventos en Google Calendar (primary) y envía la respuesta al usuario vía JARVIS_RESPONDER.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "979db087-43d4-4faa-96e0-68227a2be992",
+      "name": "Calendar Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "path": "jarvis/calendar",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "fabb9804-41e3-4294-92db-2feddbb17fc9"
+    },
+    {
+      "id": "79149837-1c85-4d7c-b61c-4a8528b379de",
+      "name": "Normalizar Input Calendar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst chatId = body.chatId ?? 0;\nconst dbUserId = body.dbUserId ?? 0;\nconst action = body.action ?? 'query';\nconst calTitle = String(body.title ?? '');\nconst startDatetime = body.startDatetime ?? null;\nconst endDatetime = body.endDatetime ?? null;\nconst queryRange = body.queryRange ?? 'today';\nconst now = new Date();\nlet timeMin, timeMax;\nif (queryRange === 'tomorrow') {\n  const t = new Date(now); t.setDate(t.getDate() + 1); t.setHours(0,0,0,0);\n  const e = new Date(t); e.setHours(23,59,59,999);\n  timeMin = t.toISOString(); timeMax = e.toISOString();\n} else if (queryRange === 'week') {\n  timeMin = now.toISOString();\n  const e = new Date(now); e.setDate(e.getDate() + 7);\n  timeMax = e.toISOString();\n} else {\n  const t = new Date(now); t.setHours(0,0,0,0);\n  const e = new Date(now); e.setHours(23,59,59,999);\n  timeMin = t.toISOString(); timeMax = e.toISOString();\n}\nlet calcEnd = endDatetime;\nif (action === 'create' && startDatetime && !endDatetime) {\n  calcEnd = new Date(new Date(startDatetime).getTime() + 3600000).toISOString();\n}\nreturn [{ json: { chatId, dbUserId, action, calTitle, startDatetime, endDatetime: calcEnd, queryRange, timeMin, timeMax } }];"
+      }
+    },
+    {
+      "id": "bfbd1432-ed1e-4dfd-845a-6ceeac529202",
+      "name": "Responder OK Calendar",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      }
+    },
+    {
+      "id": "24b154dc-7e8b-4988-8aff-50bf1e245fc1",
+      "name": "Es Crear o Consultar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Normalizar Input Calendar').first().json.action }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "create"
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "d098131f-bde6-4ea3-97dd-1ff33da20451",
+      "name": "Crear Evento Google Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "primary",
+          "cachedResultName": "primary"
+        },
+        "start": "={{ $('Normalizar Input Calendar').first().json.startDatetime }}",
+        "end": "={{ $('Normalizar Input Calendar').first().json.endDatetime }}",
+        "additionalFields": {
+          "summary": "={{ $('Normalizar Input Calendar').first().json.calTitle }}"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Tk5qdTQdXYorPss9",
+          "name": "Google Calendar account - David Tenorio"
+        }
+      }
+    },
+    {
+      "id": "872fc0e0-817c-47b1-ab1e-9a88cce9b319",
+      "name": "Preparar Resp Crear",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const ev = $input.first().json;\nconst cal = $('Normalizar Input Calendar').first().json;\nlet dateStr = '';\ntry {\n  const d = new Date(ev.start?.dateTime || cal.startDatetime);\n  dateStr = d.toLocaleString('es-CO', { timeZone: 'America/Bogota', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });\n} catch(e) { dateStr = cal.startDatetime || ''; }\nconst msg = '\\u2705 *Evento creado en Google Calendar*\\n' + (ev.summary || cal.calTitle) + '\\n\\u{1F552} ' + dateStr + (ev.htmlLink ? '\\n\\n[Ver en Calendar](' + ev.htmlLink + ')' : '');\nreturn [{ json: { chatId: cal.chatId, responseMessage: msg } }];"
+      }
+    },
+    {
+      "id": "778f39fc-ab26-4858-9bde-a6b102ee0038",
+      "name": "Responder Crear Evento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/responder",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+      }
+    },
+    {
+      "id": "91210915-00a5-4ea8-80c0-64e442c31d7e",
+      "name": "Obtener Eventos Google Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "primary",
+          "cachedResultName": "primary"
+        },
+        "returnAll": false,
+        "limit": 20,
+        "timeMin": "={{ $('Normalizar Input Calendar').first().json.timeMin }}",
+        "timeMax": "={{ $('Normalizar Input Calendar').first().json.timeMax }}",
+        "options": {
+          "singleEvents": true,
+          "orderBy": "startTime"
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Tk5qdTQdXYorPss9",
+          "name": "Google Calendar account - David Tenorio"
+        }
+      }
+    },
+    {
+      "id": "f1c41886-a7f2-43ef-b1b3-669e47731f8b",
+      "name": "Formatear Eventos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst cal = $('Normalizar Input Calendar').first().json;\nconst labels = { today: 'hoy', tomorrow: 'ma\\u00F1ana', week: 'los pr\\u00F3ximos 7 d\\u00EDas' };\nconst label = labels[cal.queryRange] || 'hoy';\nlet msg;\nconst hasEvents = items.length > 0 && items[0].json.summary;\nif (!hasEvents) {\n  msg = '\\u{1F4C5} *No tienes eventos en Google Calendar para ' + label + '.*';\n} else {\n  const lines = items.map(function(item) {\n    const ev = item.json;\n    let timeStr = '';\n    if (ev.start && ev.start.dateTime) {\n      try { timeStr = new Date(ev.start.dateTime).toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }); } catch(e) {}\n    } else if (ev.start && ev.start.date) { timeStr = 'Todo el d\\u00EDa'; }\n    return '\\u2022 ' + (timeStr ? timeStr + ' \\u2014 ' : '') + (ev.summary || 'Sin t\\u00EDtulo');\n  });\n  msg = '\\u{1F4C5} *Tus eventos de ' + label + ':*\\n' + lines.join('\\n');\n}\nreturn [{ json: { chatId: cal.chatId, responseMessage: msg } }];"
+      }
+    },
+    {
+      "id": "45922f88-d1a1-4921-afbf-16059f5af671",
+      "name": "Responder Consulta Eventos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/jarvis/responder",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Calendar Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Input Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Input Calendar": {
+      "main": [
+        [
+          {
+            "node": "Responder OK Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder OK Calendar": {
+      "main": [
+        [
+          {
+            "node": "Es Crear o Consultar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es Crear o Consultar?": {
+      "main": [
+        [
+          {
+            "node": "Crear Evento Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Obtener Eventos Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Evento Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "Preparar Resp Crear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Resp Crear": {
+      "main": [
+        [
+          {
+            "node": "Responder Crear Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Eventos Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "Formatear Eventos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Eventos": {
+      "main": [
+        [
+          {
+            "node": "Responder Consulta Eventos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "9058af28-d81c-4b13-b962-3906a6be3b81",
+  "activeVersionId": "9058af28-d81c-4b13-b962-3906a6be3b81",
+  "versionCounter": 3,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-09T00:56:34.929Z",
+      "createdAt": "2026-06-09T00:56:34.929Z",
+      "role": "workflow:owner",
+      "workflowId": "LS9cBlhiyl37UTBk",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-09T00:58:47.415Z",
+    "createdAt": "2026-06-09T00:58:47.415Z",
+    "versionId": "9058af28-d81c-4b13-b962-3906a6be3b81",
+    "workflowId": "LS9cBlhiyl37UTBk",
+    "nodes": [
+      {
+        "id": "979db087-43d4-4faa-96e0-68227a2be992",
+        "name": "Calendar Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          96
+        ],
+        "parameters": {
+          "path": "jarvis/calendar",
+          "httpMethod": "POST",
+          "responseMode": "responseNode"
+        },
+        "webhookId": "fabb9804-41e3-4294-92db-2feddbb17fc9"
+      },
+      {
+        "id": "79149837-1c85-4d7c-b61c-4a8528b379de",
+        "name": "Normalizar Input Calendar",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          96
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst chatId = body.chatId ?? 0;\nconst dbUserId = body.dbUserId ?? 0;\nconst action = body.action ?? 'query';\nconst calTitle = String(body.title ?? '');\nconst startDatetime = body.startDatetime ?? null;\nconst endDatetime = body.endDatetime ?? null;\nconst queryRange = body.queryRange ?? 'today';\nconst now = new Date();\nlet timeMin, timeMax;\nif (queryRange === 'tomorrow') {\n  const t = new Date(now); t.setDate(t.getDate() + 1); t.setHours(0,0,0,0);\n  const e = new Date(t); e.setHours(23,59,59,999);\n  timeMin = t.toISOString(); timeMax = e.toISOString();\n} else if (queryRange === 'week') {\n  timeMin = now.toISOString();\n  const e = new Date(now); e.setDate(e.getDate() + 7);\n  timeMax = e.toISOString();\n} else {\n  const t = new Date(now); t.setHours(0,0,0,0);\n  const e = new Date(now); e.setHours(23,59,59,999);\n  timeMin = t.toISOString(); timeMax = e.toISOString();\n}\nlet calcEnd = endDatetime;\nif (action === 'create' && startDatetime && !endDatetime) {\n  calcEnd = new Date(new Date(startDatetime).getTime() + 3600000).toISOString();\n}\nreturn [{ json: { chatId, dbUserId, action, calTitle, startDatetime, endDatetime: calcEnd, queryRange, timeMin, timeMax } }];"
+        }
+      },
+      {
+        "id": "bfbd1432-ed1e-4dfd-845a-6ceeac529202",
+        "name": "Responder OK Calendar",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          448,
+          96
+        ],
+        "parameters": {
+          "respondWith": "noData",
+          "options": {}
+        }
+      },
+      {
+        "id": "24b154dc-7e8b-4988-8aff-50bf1e245fc1",
+        "name": "Es Crear o Consultar?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          672,
+          96
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "leftValue": "={{ $('Normalizar Input Calendar').first().json.action }}",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                },
+                "rightValue": "create"
+              }
+            ],
+            "combinator": "and"
+          }
+        }
+      },
+      {
+        "id": "d098131f-bde6-4ea3-97dd-1ff33da20451",
+        "name": "Crear Evento Google Calendar",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          896,
+          0
+        ],
+        "parameters": {
+          "resource": "event",
+          "operation": "create",
+          "calendar": {
+            "__rl": true,
+            "mode": "list",
+            "value": "primary",
+            "cachedResultName": "primary"
+          },
+          "start": "={{ $('Normalizar Input Calendar').first().json.startDatetime }}",
+          "end": "={{ $('Normalizar Input Calendar').first().json.endDatetime }}",
+          "additionalFields": {
+            "summary": "={{ $('Normalizar Input Calendar').first().json.calTitle }}"
+          }
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "Tk5qdTQdXYorPss9",
+            "name": "Google Calendar account - David Tenorio"
+          }
+        }
+      },
+      {
+        "id": "872fc0e0-817c-47b1-ab1e-9a88cce9b319",
+        "name": "Preparar Resp Crear",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const ev = $input.first().json;\nconst cal = $('Normalizar Input Calendar').first().json;\nlet dateStr = '';\ntry {\n  const d = new Date(ev.start?.dateTime || cal.startDatetime);\n  dateStr = d.toLocaleString('es-CO', { timeZone: 'America/Bogota', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });\n} catch(e) { dateStr = cal.startDatetime || ''; }\nconst msg = '\\u2705 *Evento creado en Google Calendar*\\n' + (ev.summary || cal.calTitle) + '\\n\\u{1F552} ' + dateStr + (ev.htmlLink ? '\\n\\n[Ver en Calendar](' + ev.htmlLink + ')' : '');\nreturn [{ json: { chatId: cal.chatId, responseMessage: msg } }];"
+        }
+      },
+      {
+        "id": "778f39fc-ab26-4858-9bde-a6b102ee0038",
+        "name": "Responder Crear Evento",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1344,
+          0
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/responder",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+        }
+      },
+      {
+        "id": "91210915-00a5-4ea8-80c0-64e442c31d7e",
+        "name": "Obtener Eventos Google Calendar",
+        "type": "n8n-nodes-base.googleCalendar",
+        "typeVersion": 1.3,
+        "position": [
+          896,
+          192
+        ],
+        "parameters": {
+          "resource": "event",
+          "operation": "getAll",
+          "calendar": {
+            "__rl": true,
+            "mode": "list",
+            "value": "primary",
+            "cachedResultName": "primary"
+          },
+          "returnAll": false,
+          "limit": 20,
+          "timeMin": "={{ $('Normalizar Input Calendar').first().json.timeMin }}",
+          "timeMax": "={{ $('Normalizar Input Calendar').first().json.timeMax }}",
+          "options": {
+            "singleEvents": true,
+            "orderBy": "startTime"
+          }
+        },
+        "credentials": {
+          "googleCalendarOAuth2Api": {
+            "id": "Tk5qdTQdXYorPss9",
+            "name": "Google Calendar account - David Tenorio"
+          }
+        }
+      },
+      {
+        "id": "f1c41886-a7f2-43ef-b1b3-669e47731f8b",
+        "name": "Formatear Eventos",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1120,
+          192
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const items = $input.all();\nconst cal = $('Normalizar Input Calendar').first().json;\nconst labels = { today: 'hoy', tomorrow: 'ma\\u00F1ana', week: 'los pr\\u00F3ximos 7 d\\u00EDas' };\nconst label = labels[cal.queryRange] || 'hoy';\nlet msg;\nconst hasEvents = items.length > 0 && items[0].json.summary;\nif (!hasEvents) {\n  msg = '\\u{1F4C5} *No tienes eventos en Google Calendar para ' + label + '.*';\n} else {\n  const lines = items.map(function(item) {\n    const ev = item.json;\n    let timeStr = '';\n    if (ev.start && ev.start.dateTime) {\n      try { timeStr = new Date(ev.start.dateTime).toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' }); } catch(e) {}\n    } else if (ev.start && ev.start.date) { timeStr = 'Todo el d\\u00EDa'; }\n    return '\\u2022 ' + (timeStr ? timeStr + ' \\u2014 ' : '') + (ev.summary || 'Sin t\\u00EDtulo');\n  });\n  msg = '\\u{1F4C5} *Tus eventos de ' + label + ':*\\n' + lines.join('\\n');\n}\nreturn [{ json: { chatId: cal.chatId, responseMessage: msg } }];"
+        }
+      },
+      {
+        "id": "45922f88-d1a1-4921-afbf-16059f5af671",
+        "name": "Responder Consulta Eventos",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1344,
+          192
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "http://localhost:5678/webhook/jarvis/responder",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, message: $json.responseMessage, parseMode: 'Markdown' }) }}"
+        }
+      }
+    ],
+    "connections": {
+      "Calendar Webhook": {
+        "main": [
+          [
+            {
+              "node": "Normalizar Input Calendar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalizar Input Calendar": {
+        "main": [
+          [
+            {
+              "node": "Responder OK Calendar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Responder OK Calendar": {
+        "main": [
+          [
+            {
+              "node": "Es Crear o Consultar?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Es Crear o Consultar?": {
+        "main": [
+          [
+            {
+              "node": "Crear Evento Google Calendar",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Obtener Eventos Google Calendar",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Crear Evento Google Calendar": {
+        "main": [
+          [
+            {
+              "node": "Preparar Resp Crear",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Resp Crear": {
+        "main": [
+          [
+            {
+              "node": "Responder Crear Evento",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Obtener Eventos Google Calendar": {
+        "main": [
+          [
+            {
+              "node": "Formatear Eventos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Formatear Eventos": {
+        "main": [
+          [
+            {
+              "node": "Responder Consulta Eventos",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "David Tenorio Cruz",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-09T00:58:51.028Z",
+        "id": 81,
+        "workflowId": "LS9cBlhiyl37UTBk",
+        "versionId": "9058af28-d81c-4b13-b962-3906a6be3b81",
+        "event": "activated",
+        "userId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    ]
+  }
+}

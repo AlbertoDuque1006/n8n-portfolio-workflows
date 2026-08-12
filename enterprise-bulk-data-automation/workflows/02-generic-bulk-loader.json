@@ -1,0 +1,144 @@
+{
+  "name": "Bulk Data Engine - Generic Bulk Loader",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger",
+      "name": "When called by Main Router",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-60, 0]
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "id": "extract",
+      "name": "Extract From File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [160, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Configuración por entidad: tabla destino, columnas requeridas y su tipo.\n// Ajusta esta sección al esquema real de tu base de datos.\n// Un solo cargador reemplaza los 5+ workflows \"Cargue masivo de X\" originales.\nconst ENTITY_CONFIGS = {\n  USUARIOS: {\n    table: 'dbo.Usuarios',\n    requiredFields: ['Login', 'Nombre', 'Email'],\n    fieldTypes: { Login: 'string', Nombre: 'string', Email: 'string' }\n  },\n  MEDICAMENTOS: {\n    table: 'dbo.Medicamentos',\n    requiredFields: ['Codigo', 'Nombre', 'Presentacion'],\n    fieldTypes: { Codigo: 'string', Nombre: 'string', Presentacion: 'string' }\n  },\n  MEDICAMENTOS_COMERCIALES: {\n    table: 'dbo.MedicamentosComerciales',\n    requiredFields: ['Codigo', 'NombreComercial'],\n    fieldTypes: { Codigo: 'string', NombreComercial: 'string' }\n  },\n  INSUMOS_COMERCIALES: {\n    table: 'dbo.InsumosComerciales',\n    requiredFields: ['Codigo', 'Nombre'],\n    fieldTypes: { Codigo: 'string', Nombre: 'string' }\n  },\n  INSUMOS_GENERICOS: {\n    table: 'dbo.InsumosGenericos',\n    requiredFields: ['Codigo', 'Nombre'],\n    fieldTypes: { Codigo: 'string', Nombre: 'string' }\n  },\n  INVENTARIO: {\n    table: 'dbo.Inventario',\n    requiredFields: ['CodigoItem', 'Cantidad', 'Sede'],\n    fieldTypes: { CodigoItem: 'string', Cantidad: 'number', Sede: 'string' }\n  },\n  CONTRATOS: {\n    table: 'dbo.Contratos',\n    requiredFields: ['NumeroContrato', 'Entidad'],\n    fieldTypes: { NumeroContrato: 'string', Entidad: 'string' }\n  },\n  ASOCIACION_SEDES_CONTRATOS: {\n    table: 'dbo.AsociacionSedesContratos',\n    requiredFields: ['NumeroContrato', 'Sede'],\n    fieldTypes: { NumeroContrato: 'string', Sede: 'string' }\n  },\n  PROCEDIMIENTOS: {\n    table: 'dbo.Procedimientos',\n    requiredFields: ['Codigo', 'Nombre'],\n    fieldTypes: { Codigo: 'string', Nombre: 'string' }\n  },\n  MANUAL_TARIFARIO: {\n    table: 'dbo.ManualTarifario',\n    requiredFields: ['Codigo', 'Valor'],\n    fieldTypes: { Codigo: 'string', Valor: 'number' }\n  }\n};\n\nconst entity = ($('When called by Main Router').first().json.entity || '').toUpperCase();\nconst config = ENTITY_CONFIGS[entity];\nif (!config) {\n  throw new Error(`Entidad '${entity}' no soportada. Disponibles: ${Object.keys(ENTITY_CONFIGS).join(', ')}`);\n}\n\nconst items = $input.all();\nconst results = items.map((item, idx) => {\n  const row = item.json;\n  const errors = [];\n  for (const field of config.requiredFields) {\n    if (row[field] === undefined || row[field] === null || row[field] === '') {\n      errors.push(`Falta el campo requerido '${field}'`);\n    }\n  }\n  for (const [field, type] of Object.entries(config.fieldTypes)) {\n    if (row[field] === undefined) continue;\n    if (type === 'number' && isNaN(Number(row[field]))) {\n      errors.push(`El campo '${field}' debe ser numérico`);\n    }\n  }\n  return {\n    json: {\n      rowIndex: idx + 2, // +2: encabezado + índice base 1\n      table: config.table,\n      data: row,\n      valid: errors.length === 0,\n      errors\n    }\n  };\n});\n\nreturn results;"
+      },
+      "id": "code-validate",
+      "name": "Validar Fila (según config de entidad)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "¿Fila válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, 0]
+    },
+    {
+      "parameters": {
+        "batchSize": 50,
+        "options": {}
+      },
+      "id": "batches",
+      "name": "Loop Over Items (batches)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [820, -100]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ 'INSERT INTO ' + $json.table + ' (' + Object.keys($json.data).join(', ') + ') VALUES (' + Object.values($json.data).map(v => typeof v === 'number' ? v : \"'\" + String(v).replace(\"'\", \"''\") + \"'\").join(', ') + ')' }}",
+        "options": {}
+      },
+      "id": "sql-insert",
+      "name": "Insertar en BD (query dinámico)",
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1,
+      "position": [1040, -100],
+      "credentials": {
+        "microsoftSql": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "SQL Server - Reemplazar con tu credencial"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            { "field": "rowIndex", "aggregation": "count" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "summary-ok",
+      "name": "Resumen: Insertados",
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [1260, -100]
+    },
+    {
+      "parameters": {
+        "fieldsToSummarize": {
+          "values": [
+            { "field": "rowIndex", "aggregation": "count" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "summary-errors",
+      "name": "Resumen: Con errores",
+      "type": "n8n-nodes-base.summarize",
+      "typeVersion": 1.1,
+      "position": [820, 120]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-final",
+      "name": "Merge (resultado final)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1480, 0]
+    }
+  ],
+  "connections": {
+    "When called by Main Router": { "main": [[{ "node": "Extract From File", "type": "main", "index": 0 }]] },
+    "Extract From File": { "main": [[{ "node": "Validar Fila (según config de entidad)", "type": "main", "index": 0 }]] },
+    "Validar Fila (según config de entidad)": { "main": [[{ "node": "¿Fila válida?", "type": "main", "index": 0 }]] },
+    "¿Fila válida?": {
+      "main": [
+        [{ "node": "Loop Over Items (batches)", "type": "main", "index": 0 }],
+        [{ "node": "Resumen: Con errores", "type": "main", "index": 0 }]
+      ]
+    },
+    "Loop Over Items (batches)": { "main": [[{ "node": "Insertar en BD (query dinámico)", "type": "main", "index": 0 }]] },
+    "Insertar en BD (query dinámico)": { "main": [[{ "node": "Resumen: Insertados", "type": "main", "index": 0 }]] },
+    "Resumen: Insertados": { "main": [[{ "node": "Merge (resultado final)", "type": "main", "index": 0 }]] },
+    "Resumen: Con errores": { "main": [[{ "node": "Merge (resultado final)", "type": "main", "index": 1 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

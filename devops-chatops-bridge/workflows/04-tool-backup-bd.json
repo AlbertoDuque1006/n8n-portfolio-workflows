@@ -1,0 +1,238 @@
+{
+  "updatedAt": "2025-10-09T12:57:14.397Z",
+  "createdAt": "2025-10-03T20:33:47.128Z",
+  "id": "WEPveMwLsSrKOF9X",
+  "name": "WH-TOOL-BACKUP-BD",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -224,
+        -32
+      ],
+      "id": "5a79902e-a92b-4874-b7ff-9b544250e9ff",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Function\n * Toma cada item con `json.query` (string JSON, objeto o array) y\n * emite 1 item por registro con:\n *   - JSON: el objeto original (stringificado)\n *   - nombre: etiqueta útil \"<CasoID>-<OPERACION>-<Tabla>\"\n *\n * Soporta el ejemplo:\n * [\n *   {\n *     \"query\": \"[{...}]\"\n *   }\n * ]\n */\n\nfunction parseQuery(q) {\n  if (q == null) return [];\n  // Si ya viene como objeto/array -> normalizar a array\n  if (Array.isArray(q)) return q;\n  if (typeof q === 'object') return [q];\n\n  // Si viene como string -> intentar parsear\n  if (typeof q === 'string') {\n    const s = q.trim();\n    try {\n      const parsed = JSON.parse(s);\n      if (Array.isArray(parsed)) return parsed;\n      if (typeof parsed === 'object' && parsed) return [parsed];\n    } catch (e) {\n      // Intento de parseo \"relajado\": quitar saltos iniciales, comas colgantes típicas\n      const relaxed = s\n        .replace(/,\\s*]/g, ']')\n        .replace(/,\\s*}/g, '}');\n      try {\n        const parsed2 = JSON.parse(relaxed);\n        if (Array.isArray(parsed2)) return parsed2;\n        if (typeof parsed2 === 'object' && parsed2) return [parsed2];\n      } catch { /* caerá a vacío */ }\n    }\n  }\n  return [];\n}\n\nfunction toStringSafe(obj) {\n  if (typeof obj === 'string') return obj;\n  try { return JSON.stringify(obj); } catch { return String(obj); }\n}\n\nconst out = [];\n\nfor (const item of items) {\n  const lista = parseQuery(item.json?.query);\n\n  for (const e of lista) {\n    // Normalizaciones mínimas\n    const CasoID            = (e?.CasoID ?? '').toString().trim();\n    const NombreCliente     = (e?.NombreCliente ?? '').toString().trim();\n    const NombreBaseDeDatos = (e?.NombreBaseDeDatos ?? '').toString().trim();\n    const NombreDeLaTabla   = (e?.NombreDeLaTabla ?? '').toString().trim();\n    const Operacion         = (e?.Operacion ?? '').toString().trim().toUpperCase();\n    const QueryDeOperacion  = (e?.QueryDeOperacion ?? '').toString().trim();\n    const QueryParaBackup   = (e?.QueryParaBackup ?? '').toString().trim();\n    const ResultadoDeOperacion = e?.ResultadoDeOperacion ?? '';\n    const ResultadoBackup      = e?.ResultadoBackup ?? '';\n\n    // Ensamblar objeto limpio\n    const registro = {\n      CasoID,\n      NombreCliente,\n      NombreBaseDeDatos,\n      NombreDeLaTabla,\n      Operacion,\n      QueryDeOperacion,\n      QueryParaBackup,\n      ResultadoDeOperacion,\n      ResultadoBackup\n    };\n\n    // Etiqueta \"nombre\": <ID>-<OP>-<TABLA>\n    const nombre = [\n      CasoID || 'SINID',\n      Operacion || 'OP',\n      NombreDeLaTabla || 'SINTABLA'\n    ].join('-');\n\n    out.push({\n      json: {\n        JSON: toStringSafe(registro),\n        nombre\n      }\n    });\n  }\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -32
+      ],
+      "id": "eef4369f-97ad-4467-9dc1-5e969315a253",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a43acee2-5aa7-4739-9608-73962e4458eb",
+              "name": "CasoID",
+              "value": "={{$('Code').item.json.JSON.parseJson().CasoID}}",
+              "type": "string"
+            },
+            {
+              "id": "9af0d145-ad29-4782-882c-7f455d7c654f",
+              "name": "NombreCliente",
+              "value": "={{$('Code').item.json.JSON.parseJson().NombreCliente}}",
+              "type": "string"
+            },
+            {
+              "id": "c327cc60-3834-4519-9696-bf2f53e6b97e",
+              "name": "NombreBaseDeDatos",
+              "value": "={{$('Code').item.json.JSON.parseJson().NombreBaseDeDatos}}",
+              "type": "string"
+            },
+            {
+              "id": "e0f7613c-2d98-412f-bd05-3f7a9a389523",
+              "name": "NombreDeLaTabla",
+              "value": "={{$('Code').item.json.JSON.parseJson().NombreDeLaTabla}}",
+              "type": "string"
+            },
+            {
+              "id": "84338a88-7d5f-49c7-9b30-12821b3c0727",
+              "name": "Operacion",
+              "value": "={{$('Code').item.json.JSON.parseJson().Operacion}}",
+              "type": "string"
+            },
+            {
+              "id": "41227fbe-aa13-4cae-ba70-9d7cf36efe3d",
+              "name": "QueryDeOperacion",
+              "value": "={{$('Code').item.json.JSON.parseJson().QueryDeOperacion}}",
+              "type": "string"
+            },
+            {
+              "id": "ff4539d7-25c5-4375-9491-0af49be8f068",
+              "name": "QueryParaBackup",
+              "value": "={{$('Code').item.json.JSON.parseJson().QueryParaBackup}}",
+              "type": "string"
+            },
+            {
+              "id": "9fdca8c5-b70f-495a-b849-9632db5f880f",
+              "name": "ResultadoDeOperacion",
+              "value": "={{$('Code').item.json.JSON.parseJson().ResultadoDeOperacion}}",
+              "type": "string"
+            },
+            {
+              "id": "93a69f4b-c780-480d-be3d-501c238d310e",
+              "name": "ResultadoBackup",
+              "value": "={{$('Code').item.json.JSON.parseJson().ResultadoBackup}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        -32
+      ],
+      "id": "87c0366b-71b0-4871-8dcc-286fc257a504",
+      "name": "SetVariable"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO dbo.CasosOperacionBackupLog (\n  CasoId,\n  NombreCliente,\n  NombreBaseDeDatos,\n  TableName,\n  Operation,\n  QueryDeOperacion,\n  QueryParaBackup,\n  ResultadoDeOperacion,\n  ResultadoBackup\n)\nVALUES (\n  '{{ $(\"SetVariable\").item.json.CasoID }}',\n  '{{ $(\"SetVariable\").item.json.NombreCliente }}',\n  '{{ $(\"SetVariable\").item.json.NombreBaseDeDatos }}',\n  '{{ $(\"SetVariable\").item.json.NombreDeLaTabla }}',\n  '{{ $(\"SetVariable\").item.json.Operacion }}',\n  '{{ $(\"SetVariable\").item.json.QueryDeOperacion }}',\n  '{{ $(\"SetVariable\").item.json.QueryParaBackup }}',\n  '{{ $(\"SetVariable\").item.json.ResultadoDeOperacion }}',\n  '{{ $(\"SetVariable\").item.json.ResultadoBackup }}'\n);\n"
+      },
+      "type": "n8n-nodes-base.microsoftSql",
+      "typeVersion": 1.1,
+      "position": [
+        432,
+        -32
+      ],
+      "id": "7fe3f185-7912-45de-9378-8bb756300ccf",
+      "name": "Microsoft SQL",
+      "credentials": {
+        "microsoftSql": {
+          "id": "PJK2Mp6lKuZhRCmn",
+          "name": "Microsoft SQL account - gsh-gshoqr-db.database.windows.net - DB: iMedicalDataLogs_Test"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "SetVariable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SetVariable": {
+      "main": [
+        [
+          {
+            "node": "Microsoft SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "query": "[\n  {\n    \"CasoID\": \"28661\",\n    \"NombreCliente\": \"Cieno Group\",\n    \"NombreBaseDeDatos\": \"CienoGroup\",\n    \"NombreDeLaTabla\": \"iIngresos\",\n    \"Operacion\": \"UPDATE\",\n    \"QueryDeOperacion\": \"UPDATE iIngresos SET idServicioIngreso = 295 WHERE idIngreso IN (979622);\",\n    \"QueryParaBackup\": \"SELECT idIngreso, idServicioIngreso FROM iIngresos WHERE idIngreso IN (979622);\",\n    \"ResultadoDeOperacion\": \"[\\n  {\\n    \\\"message\\\": \\\"Query 1 executed successfully\\\",\\n    \\\"rowsAffected\\\": 1\\n  }\\n]\",\n    \"ResultadoBackup\": \"[\\n  {\\n    \\\"idIngreso\\\": 979622,\\n    \\\"idServicioIngreso\\\": 295\\n  }\\n]\"\n  }\n]"
+        }
+      }
+    ]
+  },
+  "versionId": "40b9fd66-7a89-4175-8092-6f69d6183590",
+  "activeVersionId": null,
+  "versionCounter": 1,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2025-10-03T20:33:47.128Z",
+      "createdAt": "2025-10-03T20:33:47.128Z",
+      "role": "workflow:owner",
+      "workflowId": "WEPveMwLsSrKOF9X",
+      "projectId": "fTnylytOq7y7H3Px",
+      "project": {
+        "updatedAt": "2025-09-30T22:49:25.479Z",
+        "createdAt": "2025-09-30T22:45:44.786Z",
+        "id": "fTnylytOq7y7H3Px",
+        "name": "Alberto José Duque Gómez <alberto.duque@yourcompany.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-09-30T22:45:44.786Z",
+            "createdAt": "2025-09-30T22:45:44.786Z",
+            "userId": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+            "projectId": "fTnylytOq7y7H3Px",
+            "user": {
+              "updatedAt": "2026-08-11T21:46:31.645Z",
+              "createdAt": "2025-09-30T22:45:43.378Z",
+              "id": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+              "email": "alberto.duque@yourcompany.example",
+              "firstName": "Alberto José",
+              "lastName": "Duque Gómez",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-09-30T22:49:28.564Z",
+                "personalization_survey_n8n_version": "1.107.0"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "MxeXP185zMU9ZFde",
+                "userActivatedAt": 1759325657829,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1781033800351
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-08-11",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}

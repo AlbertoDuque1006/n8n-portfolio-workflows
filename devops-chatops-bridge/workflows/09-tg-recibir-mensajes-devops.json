@@ -1,0 +1,720 @@
+{
+  "updatedAt": "2025-11-27T19:18:40.811Z",
+  "createdAt": "2025-10-01T13:13:51.581Z",
+  "id": "jdUSKns6mXrrQzVP",
+  "name": "TG-RECIBIR_MENSAJES_DEVOPS",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "42990bf2-5f50-4a9f-9553-004083e03203",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -144,
+        0
+      ],
+      "id": "31511c64-8e71-4473-82ed-1c5a391af67b",
+      "name": "Webhook",
+      "webhookId": "42990bf2-5f50-4a9f-9553-004083e03203"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// n8n Function Item\n\n// 1) El \"body\" es simplemente el JSON del item\nlet body = item.json || {};\n\n// 2) Tomar el SQL desde las PascalCase (o alternativas si algún día cambia)\nlet rawSql =\n  body.SqlEjecutado ??\n  body.QueryDeOperacion ??\n  body.Query ??\n  body.query ??\n  '';\n\n// 3) Asegurar que sea string\nif (typeof rawSql !== 'string') {\n  try { rawSql = JSON.stringify(rawSql); }\n  catch (e) { rawSql = String(rawSql); }\n}\n\n// 4) Limpieza HTML / entidades / espacios\nlet sql = rawSql\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>/gi, '\\n')\n  .replace(/<p[^>]*>/gi, '')\n  .replace(/<[^>]*>/g, '')\n  .replace(/(&nbsp;|&lt;|&gt;|&amp;|&#39;|&quot;)/g, m => ({\n    '&nbsp;': ' ',\n    '&lt;': '<',\n    '&gt;': '>',\n    '&amp;': '&',\n    '&#39;': \"'\",\n    '&quot;': '\"'\n  })[m])\n  .replace(/[ \\t]+\\n/g, '\\n')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .replace(/[ \\t]{2,}/g, ' ')\n  .trim();\n\n// 5) Inferir operación\nconst opMatch = /^\\s*(update|insert|delete|merge|select)\\b/i.exec(sql || '');\nconst Operacion = opMatch\n  ? opMatch[1].toUpperCase()\n  : (body.Operacion?.toUpperCase?.() || 'UNKNOWN');\n\n// 6) Salida con todas tus PascalCase + Agregado AsignadoPara\nconst out = {\n  CasoId:        body.CasoId ?? null,\n  Cliente:       body.Cliente ?? null,\n  BaseDeDatos:   body.BaseDeDatos ?? null,\n  SqlEjecutado:  sql,\n  Operacion,\n  UrlCaso:       body.UrlCaso ?? null,\n  TituloCaso:    body.TituloCaso ?? null,\n  CreadoPor:     body.CreadoPor ?? null,\n  AsignadoPara:  body.AsignadoPara ?? body.asignadoPara ?? null,  // 👈 NUEVO\n  EjecucionEn:   new Date().toISOString()\n};\n\n// 7) Return (un solo item)\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        0
+      ],
+      "id": "16c6c8d0-a8e1-409b-ade5-0162a032ae2d",
+      "name": "Code: HTML a Markdown"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Function (procesa todos los items de entrada y devuelve { text } por item)\n\n// --- Utilidades ---\nfunction stripHtml(input) {\n  if (input == null) return '';\n  let s = String(input);\n  s = s.replace(/<br\\s*\\/?>/gi, '\\n')\n       .replace(/<\\/p>/gi, '\\n')\n       .replace(/<p[^>]*>/gi, '');\n  s = s.replace(/<[^>]*>/g, '');\n  s = s.replace(/(&nbsp;|&lt;|&gt;|&amp;|&#39;|&quot;)/g, m => ({\n    '&nbsp;':' ', '&lt;':'<', '&gt;':'>', '&amp;':'&', '&#39;':\"'\", '&quot;':'\"'\n  })[m]);\n  return s;\n}\n\nfunction normalizeQuery(q) {\n  if (q == null) return '';\n  if (Array.isArray(q)) q = q.join('\\n');\n  if (typeof q !== 'string') { try { q = JSON.stringify(q); } catch { q = String(q); } }\n  q = stripHtml(q);\n  q = q.replace(/`{3,}/g, '');\n  q = q.replace(/[\\u2000-\\u200A\\u202F\\u205F\\u3000]/g, ' ')\n       .replace(/\\r\\n?/g, '\\n');\n  q = q.replace(/\\(\\s+/g, '(')\n       .replace(/\\s+\\)/g, ')')\n       .replace(/[ \\t]+\\n/g, '\\n')\n       .replace(/\\n{3,}/g, '\\n\\n');\n  q = q.split(';').map(s => s.trim()).filter(Boolean).join('\\n');\n  q = q.replace(/[ \\t]{2,}/g, ' ').trim();\n  q = q.replace(/<\\/?[^>]+>$/g, '').trim();\n  return q;\n}\n\nreturn items.map(({ json }) => {\n  // Variables esperadas en PascalCase\n  const CasoId       = json?.CasoId ?? '';\n  const Cliente      = json?.Cliente ?? '';\n  const BaseDeDatos  = json?.BaseDeDatos ?? '';\n  const SqlEjecutado = normalizeQuery(json?.SqlEjecutado ?? '');\n  const Operacion    = (json?.Operacion ?? '').toString().toUpperCase();\n  const UrlCaso      = json?.UrlCaso ?? '';\n  const TituloCaso   = json?.TituloCaso ?? '';\n  const CreadoPor    = json?.CreadoPor ?? '';\n  const AsignadoPara    = json?.AsignadoPara ?? '';   // <-- NUEVO CAMPO\n\n  const metaLines = [\n    `- **ID del Caso:** ${CasoId}`,\n    TituloCaso   ? `- **Título del Caso:** ${TituloCaso}` : null,\n    Cliente      ? `- **Cliente:** ${Cliente}` : null,\n    BaseDeDatos  ? `- **Base de Datos:** ${BaseDeDatos}` : null,\n    Operacion    ? `- **Operación:** ${Operacion}` : null,\n    AsignadoPara    ? `- **Asignado a:** ${AsignadoPara}` : null,  // <-- \n    UrlCaso      ? `- **URL de Referencia:** (${UrlCaso})` : null,\n    CreadoPor    ? `- **Creado por:** ${CreadoPor}` : null\n  ].filter(Boolean);\n\n  const bloques = [];\n  if (SqlEjecutado) {\n    bloques.push(\n      '- **SQL Ejecutado:**',\n      '```sql',\n      SqlEjecutado,\n      '```'\n    );\n  }\n\n  const md = [\n    '📢 Notificación de Caso DevOps – Soporte de Operación',\n    '',\n    ...metaLines,\n    '',\n    ...bloques\n  ].join('\\n');\n\n  const mdLimpio = md.replace(/<\\/p>/gi, '').trim();\n  \n  return { json: { text: mdLimpio } };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        0
+      ],
+      "id": "1128c503-090d-4b0b-b0e0-b514465e41f0",
+      "name": "Code: Enviar correo"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d9cb03a8-3895-4ba0-963a-1736d3bf92b1",
+              "name": "body.body",
+              "value": "={{ $json.body.body }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        16,
+        0
+      ],
+      "id": "e8accb10-e01d-4c39-909f-0b575681f6be",
+      "name": "Set variables body"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f81a8a8a-2568-4d84-8bb1-9ec57682d957",
+              "name": "CasoId",
+              "value": "={{ $('Set variables body').item.json.body.body.id}}",
+              "type": "string"
+            },
+            {
+              "id": "4c0c4e08-a3d5-4a13-bf9a-efa2714c6e2b",
+              "name": "Cliente",
+              "value": "={{ $('Set variables body').item.json.body.body.fields.Custom_EntityClient}}",
+              "type": "string"
+            },
+            {
+              "id": "c43ec9bc-01d1-4baa-bfa0-ac25e170a754",
+              "name": "BaseDeDatos",
+              "value": "={{ $('Set variables body').item.json.body.body.fields.Custom_Environment}}",
+              "type": "string"
+            },
+            {
+              "id": "e8f9570c-e5e8-4bd2-a22b-5d88f443ffc3",
+              "name": "SqlEjecutado",
+              "value": "={{ $('Set variables body').item.json.body.body.fields.System_Description}}",
+              "type": "string"
+            },
+            {
+              "id": "188a13b5-9ea6-43e2-9398-66201fbcfc42",
+              "name": "UrlCaso",
+              "value": "={{ $('Set variables body').item.json.body.body.url}}",
+              "type": "string"
+            },
+            {
+              "id": "a46d9446-8152-4e98-ac99-ae63c96274bb",
+              "name": "TituloCaso",
+              "value": "={{ $('Set variables body').item.json.body.body.fields.System_Title}}",
+              "type": "string"
+            },
+            {
+              "id": "e709c9d6-0714-43a7-bae2-db9aedecf4f6",
+              "name": "CreadoPor",
+              "value": "={{ $('Set variables body').item.json.body.body.fields.System_CreatedBy }}",
+              "type": "string"
+            },
+            {
+              "id": "b988744a-5fc7-44fe-b585-3c23dcf0552a",
+              "name": "AsignadoPara",
+              "value": "={{ $json.body.body.fields.System_AssignedTo }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        0
+      ],
+      "id": "691ef963-6f01-4261-bcab-925fd766f306",
+      "name": "Set variables primeras variables"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-app.azurewebsites.example:443/api/LG_RESPONDER_MENSAJE_GRUPO_TEAMS_CON_N8N/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=YOUR_SAS_SIGNATURE",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "output",
+              "value": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        928,
+        0
+      ],
+      "id": "3ee91f43-fef0-40d3-9f8d-1f5b3c91c78e",
+      "name": "Enviar mensaje al grupo de teams"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f81a8a8a-2568-4d84-8bb1-9ec57682d957",
+              "name": "CasoId",
+              "value": "={{ $json.CasoId }}",
+              "type": "string"
+            },
+            {
+              "id": "4c0c4e08-a3d5-4a13-bf9a-efa2714c6e2b",
+              "name": "Cliente",
+              "value": "={{ $json.Cliente }}",
+              "type": "string"
+            },
+            {
+              "id": "c43ec9bc-01d1-4baa-bfa0-ac25e170a754",
+              "name": "BaseDeDatos",
+              "value": "={{ $json.BaseDeDatos }}",
+              "type": "string"
+            },
+            {
+              "id": "e8f9570c-e5e8-4bd2-a22b-5d88f443ffc3",
+              "name": "SqlEjecutado",
+              "value": "={{ $json.SqlEjecutado }}",
+              "type": "string"
+            },
+            {
+              "id": "4a470b9e-6d18-4fc6-ab42-6131d16a551f",
+              "name": "Operacion",
+              "value": "={{ $json.Operacion }}",
+              "type": "string"
+            },
+            {
+              "id": "188a13b5-9ea6-43e2-9398-66201fbcfc42",
+              "name": "UrlCaso",
+              "value": "={{ $json.UrlCaso }}",
+              "type": "string"
+            },
+            {
+              "id": "a46d9446-8152-4e98-ac99-ae63c96274bb",
+              "name": "TituloCaso",
+              "value": "={{ $json.TituloCaso }}",
+              "type": "string"
+            },
+            {
+              "id": "85a93333-361b-4aae-87eb-6b4cb6c4591b",
+              "name": "=CreadoPor",
+              "value": "={{ $('Set variables body').item.json.body.body.fields.System_CreatedBy }}",
+              "type": "string"
+            },
+            {
+              "id": "2aff6502-8415-4cd7-a72a-b0740296d32d",
+              "name": "AsignadoPara",
+              "value": "={{ $('Set variables primeras variables').item.json.AsignadoPara }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        528,
+        0
+      ],
+      "id": "835f6431-ce78-4a8a-8c70-0ecb94bf03b2",
+      "name": "Set variables"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set variables body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: HTML a Markdown": {
+      "main": [
+        [
+          {
+            "node": "Set variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Enviar correo": {
+      "main": [
+        [
+          {
+            "node": "Enviar mensaje al grupo de teams",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set variables body": {
+      "main": [
+        [
+          {
+            "node": "Set variables primeras variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set variables primeras variables": {
+      "main": [
+        [
+          {
+            "node": "Code: HTML a Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set variables": {
+      "main": [
+        [
+          {
+            "node": "Code: Enviar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n-test.yourcompany.example",
+            "x-request-id": "f0be073ba3e02def9f7c92c1ecff7cff",
+            "x-real-ip": "203.0.113.10",
+            "x-forwarded-for": "203.0.113.10",
+            "x-forwarded-host": "n8n-test.yourcompany.example",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-scheme": "https",
+            "x-scheme": "https",
+            "content-length": "3866",
+            "accept-language": "en-US",
+            "user-agent": "azure-logic-apps/1.0 (workflow c4f6e21b9aef4bea8bbf7ee50e58e501; version 08584373521087331369)",
+            "x-ms-workflow-id": "c4f6e21b9aef4bea8bbf7ee50e58e501",
+            "x-ms-workflow-version": "08584373521087331369",
+            "x-ms-workflow-name": "LG_TG_CASO_DEVOPS_CON_N8N",
+            "x-ms-workflow-system-id": "/scaleunits/prod-00/workflows/c4f6e21b9aef4bea8bbf7ee50e58e501",
+            "x-ms-workflow-run-id": "08584373492971949198541957272CU00",
+            "x-ms-workflow-run-tracking-id": "c09ad107-1c67-4fea-b2bd-c03512190817",
+            "x-ms-workflow-operation-name": "HTTP",
+            "x-ms-tracking-id": "4d0d1110-0865-4c3e-aaa5-084198efe467",
+            "x-ms-correlation-id": "4d0d1110-0865-4c3e-aaa5-084198efe467",
+            "x-ms-client-request-id": "4d0d1110-0865-4c3e-aaa5-084198efe467",
+            "x-ms-client-tracking-id": "08584373492971949199541957272CU00",
+            "x-ms-action-tracking-id": "ed5e7cf1-d20b-4ec2-aa91-b855debcd20f",
+            "x-ms-activity-vector": "IN.1N",
+            "accept-encoding": "gzip, deflate",
+            "request-context": "appId=cid-v1:5f8b3dc8-bbeb-4fef-9fe5-17dd2d76ad59",
+            "request-id": "|2e9fa4b94ad8ee909c4d68fac2edb975.b5ff5e3f998040d8.",
+            "traceparent": "00-2e9fa4b94ad8ee909c4d68fac2edb975-b5ff5e3f998040d8-00",
+            "content-type": "application/json; charset=utf-8"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "body": "{\"id\":30888,\"rev\":4,\"url\":\"https://dev.azure.com/YOUR_ORG/_apis/wit/workItems/30888\",\"fields\":{\"System_Id\":30888,\"System_AreaId\":548,\"System_AreaPath\":\"iMedical Implementación\",\"System_TeamProject\":\"iMedical Implementación\",\"System_NodeName\":\"iMedical Implementación\",\"System_AreaLevel1\":\"iMedical Implementación\",\"System_Rev\":4,\"System_AuthorizedDate\":\"2025-11-27T15:32:35.757Z\",\"System_RevisedDate\":\"9999-01-01T00:00:00Z\",\"System_IterationId\":540,\"System_IterationPath\":\"iMedical Implementación\",\"System_IterationLevel1\":\"iMedical Implementación\",\"System_WorkItemType\":\"Soporte operación\",\"System_State\":\"New\",\"System_Reason\":\"Moved to state New\",\"System_AssignedTo\":\"Alberto José Duque Gómez <alberto.duque@yourcompany.example>\",\"System_CreatedDate\":\"2025-11-27T14:47:00.593Z\",\"System_CreatedBy\":\"Alberto José Duque Gómez <alberto.duque@yourcompany.example>\",\"System_ChangedDate\":\"2025-11-27T15:32:35.757Z\",\"System_ChangedBy\":\"Alberto José Duque Gómez <alberto.duque@yourcompany.example>\",\"System_AuthorizedAs\":\"Alberto José Duque Gómez <alberto.duque@yourcompany.example>\",\"System_PersonId\":123360168,\"System_Watermark\":230932,\"System_CommentCount\":0,\"System_Title\":\"CASO DE PRUEBA\",\"Microsoft_VSTS_Scheduling_CompletedWork\":60.0,\"Microsoft_VSTS_Common_StateChangeDate\":\"2025-11-27T15:32:35.757Z\",\"Custom_Environment\":\"CienoGroup\",\"Custom_EntityClient\":\"Cieno Group\",\"Custom_Supporttype\":\"Ejecución de script\",\"Custom_7c354148-b0ad-4dfd-bc7a-e4ec0c935f04\":\"No\",\"System_Description\":\"<div style=\\\"margin-top:14px;margin-bottom:14px;\\\"><pre style=\\\"box-sizing:border-box;font-family:&quot;Cascadia Mono&quot;, Consolas, ui-monospace, Menlo, Monaco, monospace;border-color:rgb(209, 209, 209);border-style:solid;border-width:0.701754px;border-radius:4px;clear:left;margin:1rem 0px;overflow-x:auto;color:rgb(36, 36, 36);\\\"><code style=\\\"box-sizing:border-box;font-size:1em;border:none;border-radius:4px;display:inline-block;margin:0px 2px;padding:4px;width:fit-content;\\\">update iIngresos set idServicioIngreso = 100 where idIngreso = 1\\nupdate iIngresos set idServicioIngreso = 2001 where idIngreso = 1001</code></pre><br></div><p> </p>\",\"Custom_ComoafectalaseguridaddelainformacionendisponibilidadoIntegridadoconfidencialidad\":\"<div>no </div>\",\"System_ExternalLinkCount\":null,\"System_IterationLevel7\":null,\"System_IterationLevel6\":null,\"System_IterationLevel5\":null,\"System_IterationLevel4\":null,\"System_IterationLevel3\":null,\"System_IterationLevel2\":null,\"System_AreaLevel7\":null,\"System_AreaLevel6\":null,\"System_AreaLevel5\":null,\"System_AreaLevel4\":null,\"System_AreaLevel3\":null,\"System_AreaLevel2\":null,\"System_Parent\":null,\"System_RemoteLinkCount\":null,\"System_HyperLinkCount\":null,\"System_AttachedFileCount\":null,\"System_History\":null,\"System_RelatedLinkCount\":null,\"System_Tags\":null,\"System_BoardColumn\":null,\"System_BoardColumnDone\":null,\"System_BoardLane\":null,\"Microsoft_VSTS_Common_ActivatedDate\":null,\"Microsoft_VSTS_Common_ActivatedBy\":null,\"Microsoft_VSTS_Common_ResolvedDate\":null,\"Microsoft_VSTS_Common_ResolvedBy\":null,\"Microsoft_VSTS_Common_ClosedDate\":null,\"Microsoft_VSTS_Common_ClosedBy\":null,\"Microsoft_VSTS_Common_Priority\":null,\"Custom_SolutionVersion\":null,\"Custom_ReportedVersion\":null,\"Custom_IDZohoDesk\":null,\"Custom_Module\":null,\"Custom_PostDeploy\":null,\"Custom_UserManual\":null,\"Custom_URLDocumentodeRequerimientosGeneral\":null,\"Custom_26e7c67b-253d-43ca-9a54-a111b47be25d\":null,\"Microsoft_VSTS_Common_BacklogPriority\":null,\"Vsts_AssignedToEmail\":\"alberto.duque@yourcompany.example\",\"Vsts_WorkItemUrl\":\"https://dev.azure.com/YOUR_ORG/_apis/wit/workItems/30888\"}}"
+          },
+          "webhookUrl": "https://n8n-test.yourcompany.example/webhook/42990bf2-5f50-4a9f-9553-004083e03203",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
+  "versionId": "a8a70c4d-9ce6-48ff-a083-97054808b767",
+  "activeVersionId": "a8a70c4d-9ce6-48ff-a083-97054808b767",
+  "versionCounter": 177,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2025-10-01T13:13:51.581Z",
+      "createdAt": "2025-10-01T13:13:51.581Z",
+      "role": "workflow:owner",
+      "workflowId": "jdUSKns6mXrrQzVP",
+      "projectId": "fTnylytOq7y7H3Px",
+      "project": {
+        "updatedAt": "2025-09-30T22:49:25.479Z",
+        "createdAt": "2025-09-30T22:45:44.786Z",
+        "id": "fTnylytOq7y7H3Px",
+        "name": "Alberto José Duque Gómez <alberto.duque@yourcompany.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "projectRelations": [
+          {
+            "updatedAt": "2025-09-30T22:45:44.786Z",
+            "createdAt": "2025-09-30T22:45:44.786Z",
+            "userId": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+            "projectId": "fTnylytOq7y7H3Px",
+            "user": {
+              "updatedAt": "2026-08-11T21:46:31.645Z",
+              "createdAt": "2025-09-30T22:45:43.378Z",
+              "id": "e95126f2-bd2c-4131-92e3-11f8fb92ab77",
+              "email": "alberto.duque@yourcompany.example",
+              "firstName": "Alberto José",
+              "lastName": "Duque Gómez",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2025-09-30T22:49:28.564Z",
+                "personalization_survey_n8n_version": "1.107.0"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "MxeXP185zMU9ZFde",
+                "userActivatedAt": 1759325657829,
+                "npsSurvey": {
+                  "responded": true,
+                  "lastShownAt": 1781033800351
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-08-11",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-01-09T16:34:58.183Z",
+    "createdAt": "2026-01-09T16:34:58.183Z",
+    "versionId": "a8a70c4d-9ce6-48ff-a083-97054808b767",
+    "workflowId": "jdUSKns6mXrrQzVP",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "42990bf2-5f50-4a9f-9553-004083e03203",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -144,
+          0
+        ],
+        "id": "31511c64-8e71-4473-82ed-1c5a391af67b",
+        "name": "Webhook",
+        "webhookId": "42990bf2-5f50-4a9f-9553-004083e03203"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "// n8n Function Item\n\n// 1) El \"body\" es simplemente el JSON del item\nlet body = item.json || {};\n\n// 2) Tomar el SQL desde las PascalCase (o alternativas si algún día cambia)\nlet rawSql =\n  body.SqlEjecutado ??\n  body.QueryDeOperacion ??\n  body.Query ??\n  body.query ??\n  '';\n\n// 3) Asegurar que sea string\nif (typeof rawSql !== 'string') {\n  try { rawSql = JSON.stringify(rawSql); }\n  catch (e) { rawSql = String(rawSql); }\n}\n\n// 4) Limpieza HTML / entidades / espacios\nlet sql = rawSql\n  .replace(/<br\\s*\\/?>/gi, '\\n')\n  .replace(/<\\/p>/gi, '\\n')\n  .replace(/<p[^>]*>/gi, '')\n  .replace(/<[^>]*>/g, '')\n  .replace(/(&nbsp;|&lt;|&gt;|&amp;|&#39;|&quot;)/g, m => ({\n    '&nbsp;': ' ',\n    '&lt;': '<',\n    '&gt;': '>',\n    '&amp;': '&',\n    '&#39;': \"'\",\n    '&quot;': '\"'\n  })[m])\n  .replace(/[ \\t]+\\n/g, '\\n')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .replace(/[ \\t]{2,}/g, ' ')\n  .trim();\n\n// 5) Inferir operación\nconst opMatch = /^\\s*(update|insert|delete|merge|select)\\b/i.exec(sql || '');\nconst Operacion = opMatch\n  ? opMatch[1].toUpperCase()\n  : (body.Operacion?.toUpperCase?.() || 'UNKNOWN');\n\n// 6) Salida con todas tus PascalCase + Agregado AsignadoPara\nconst out = {\n  CasoId:        body.CasoId ?? null,\n  Cliente:       body.Cliente ?? null,\n  BaseDeDatos:   body.BaseDeDatos ?? null,\n  SqlEjecutado:  sql,\n  Operacion,\n  UrlCaso:       body.UrlCaso ?? null,\n  TituloCaso:    body.TituloCaso ?? null,\n  CreadoPor:     body.CreadoPor ?? null,\n  AsignadoPara:  body.AsignadoPara ?? body.asignadoPara ?? null,  // 👈 NUEVO\n  EjecucionEn:   new Date().toISOString()\n};\n\n// 7) Return (un solo item)\nreturn out;\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          368,
+          0
+        ],
+        "id": "16c6c8d0-a8e1-409b-ade5-0162a032ae2d",
+        "name": "Code: HTML a Markdown"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Function (procesa todos los items de entrada y devuelve { text } por item)\n\n// --- Utilidades ---\nfunction stripHtml(input) {\n  if (input == null) return '';\n  let s = String(input);\n  s = s.replace(/<br\\s*\\/?>/gi, '\\n')\n       .replace(/<\\/p>/gi, '\\n')\n       .replace(/<p[^>]*>/gi, '');\n  s = s.replace(/<[^>]*>/g, '');\n  s = s.replace(/(&nbsp;|&lt;|&gt;|&amp;|&#39;|&quot;)/g, m => ({\n    '&nbsp;':' ', '&lt;':'<', '&gt;':'>', '&amp;':'&', '&#39;':\"'\", '&quot;':'\"'\n  })[m]);\n  return s;\n}\n\nfunction normalizeQuery(q) {\n  if (q == null) return '';\n  if (Array.isArray(q)) q = q.join('\\n');\n  if (typeof q !== 'string') { try { q = JSON.stringify(q); } catch { q = String(q); } }\n  q = stripHtml(q);\n  q = q.replace(/`{3,}/g, '');\n  q = q.replace(/[\\u2000-\\u200A\\u202F\\u205F\\u3000]/g, ' ')\n       .replace(/\\r\\n?/g, '\\n');\n  q = q.replace(/\\(\\s+/g, '(')\n       .replace(/\\s+\\)/g, ')')\n       .replace(/[ \\t]+\\n/g, '\\n')\n       .replace(/\\n{3,}/g, '\\n\\n');\n  q = q.split(';').map(s => s.trim()).filter(Boolean).join('\\n');\n  q = q.replace(/[ \\t]{2,}/g, ' ').trim();\n  q = q.replace(/<\\/?[^>]+>$/g, '').trim();\n  return q;\n}\n\nreturn items.map(({ json }) => {\n  // Variables esperadas en PascalCase\n  const CasoId       = json?.CasoId ?? '';\n  const Cliente      = json?.Cliente ?? '';\n  const BaseDeDatos  = json?.BaseDeDatos ?? '';\n  const SqlEjecutado = normalizeQuery(json?.SqlEjecutado ?? '');\n  const Operacion    = (json?.Operacion ?? '').toString().toUpperCase();\n  const UrlCaso      = json?.UrlCaso ?? '';\n  const TituloCaso   = json?.TituloCaso ?? '';\n  const CreadoPor    = json?.CreadoPor ?? '';\n  const AsignadoPara    = json?.AsignadoPara ?? '';   // <-- NUEVO CAMPO\n\n  const metaLines = [\n    `- **ID del Caso:** ${CasoId}`,\n    TituloCaso   ? `- **Título del Caso:** ${TituloCaso}` : null,\n    Cliente      ? `- **Cliente:** ${Cliente}` : null,\n    BaseDeDatos  ? `- **Base de Datos:** ${BaseDeDatos}` : null,\n    Operacion    ? `- **Operación:** ${Operacion}` : null,\n    AsignadoPara    ? `- **Asignado a:** ${AsignadoPara}` : null,  // <-- \n    UrlCaso      ? `- **URL de Referencia:** (${UrlCaso})` : null,\n    CreadoPor    ? `- **Creado por:** ${CreadoPor}` : null\n  ].filter(Boolean);\n\n  const bloques = [];\n  if (SqlEjecutado) {\n    bloques.push(\n      '- **SQL Ejecutado:**',\n      '```sql',\n      SqlEjecutado,\n      '```'\n    );\n  }\n\n  const md = [\n    '📢 Notificación de Caso DevOps – Soporte de Operación',\n    '',\n    ...metaLines,\n    '',\n    ...bloques\n  ].join('\\n');\n\n  const mdLimpio = md.replace(/<\\/p>/gi, '').trim();\n  \n  return { json: { text: mdLimpio } };\n});\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          688,
+          0
+        ],
+        "id": "1128c503-090d-4b0b-b0e0-b514465e41f0",
+        "name": "Code: Enviar correo"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "d9cb03a8-3895-4ba0-963a-1736d3bf92b1",
+                "name": "body.body",
+                "value": "={{ $json.body.body }}",
+                "type": "object"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          16,
+          0
+        ],
+        "id": "e8accb10-e01d-4c39-909f-0b575681f6be",
+        "name": "Set variables body"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "f81a8a8a-2568-4d84-8bb1-9ec57682d957",
+                "name": "CasoId",
+                "value": "={{ $('Set variables body').item.json.body.body.id}}",
+                "type": "string"
+              },
+              {
+                "id": "4c0c4e08-a3d5-4a13-bf9a-efa2714c6e2b",
+                "name": "Cliente",
+                "value": "={{ $('Set variables body').item.json.body.body.fields.Custom_EntityClient}}",
+                "type": "string"
+              },
+              {
+                "id": "c43ec9bc-01d1-4baa-bfa0-ac25e170a754",
+                "name": "BaseDeDatos",
+                "value": "={{ $('Set variables body').item.json.body.body.fields.Custom_Environment}}",
+                "type": "string"
+              },
+              {
+                "id": "e8f9570c-e5e8-4bd2-a22b-5d88f443ffc3",
+                "name": "SqlEjecutado",
+                "value": "={{ $('Set variables body').item.json.body.body.fields.System_Description}}",
+                "type": "string"
+              },
+              {
+                "id": "188a13b5-9ea6-43e2-9398-66201fbcfc42",
+                "name": "UrlCaso",
+                "value": "={{ $('Set variables body').item.json.body.body.url}}",
+                "type": "string"
+              },
+              {
+                "id": "a46d9446-8152-4e98-ac99-ae63c96274bb",
+                "name": "TituloCaso",
+                "value": "={{ $('Set variables body').item.json.body.body.fields.System_Title}}",
+                "type": "string"
+              },
+              {
+                "id": "e709c9d6-0714-43a7-bae2-db9aedecf4f6",
+                "name": "CreadoPor",
+                "value": "={{ $('Set variables body').item.json.body.body.fields.System_CreatedBy }}",
+                "type": "string"
+              },
+              {
+                "id": "b988744a-5fc7-44fe-b585-3c23dcf0552a",
+                "name": "AsignadoPara",
+                "value": "={{ $json.body.body.fields.System_AssignedTo }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          192,
+          0
+        ],
+        "id": "691ef963-6f01-4261-bcab-925fd766f306",
+        "name": "Set variables primeras variables"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://your-app.azurewebsites.example:443/api/LG_RESPONDER_MENSAJE_GRUPO_TEAMS_CON_N8N/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=YOUR_SAS_SIGNATURE",
+          "sendBody": true,
+          "bodyParameters": {
+            "parameters": [
+              {
+                "name": "output",
+                "value": "={{ $json.text }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          928,
+          0
+        ],
+        "id": "3ee91f43-fef0-40d3-9f8d-1f5b3c91c78e",
+        "name": "Enviar mensaje al grupo de teams"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "f81a8a8a-2568-4d84-8bb1-9ec57682d957",
+                "name": "CasoId",
+                "value": "={{ $json.CasoId }}",
+                "type": "string"
+              },
+              {
+                "id": "4c0c4e08-a3d5-4a13-bf9a-efa2714c6e2b",
+                "name": "Cliente",
+                "value": "={{ $json.Cliente }}",
+                "type": "string"
+              },
+              {
+                "id": "c43ec9bc-01d1-4baa-bfa0-ac25e170a754",
+                "name": "BaseDeDatos",
+                "value": "={{ $json.BaseDeDatos }}",
+                "type": "string"
+              },
+              {
+                "id": "e8f9570c-e5e8-4bd2-a22b-5d88f443ffc3",
+                "name": "SqlEjecutado",
+                "value": "={{ $json.SqlEjecutado }}",
+                "type": "string"
+              },
+              {
+                "id": "4a470b9e-6d18-4fc6-ab42-6131d16a551f",
+                "name": "Operacion",
+                "value": "={{ $json.Operacion }}",
+                "type": "string"
+              },
+              {
+                "id": "188a13b5-9ea6-43e2-9398-66201fbcfc42",
+                "name": "UrlCaso",
+                "value": "={{ $json.UrlCaso }}",
+                "type": "string"
+              },
+              {
+                "id": "a46d9446-8152-4e98-ac99-ae63c96274bb",
+                "name": "TituloCaso",
+                "value": "={{ $json.TituloCaso }}",
+                "type": "string"
+              },
+              {
+                "id": "85a93333-361b-4aae-87eb-6b4cb6c4591b",
+                "name": "=CreadoPor",
+                "value": "={{ $('Set variables body').item.json.body.body.fields.System_CreatedBy }}",
+                "type": "string"
+              },
+              {
+                "id": "2aff6502-8415-4cd7-a72a-b0740296d32d",
+                "name": "AsignadoPara",
+                "value": "={{ $('Set variables primeras variables').item.json.AsignadoPara }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          528,
+          0
+        ],
+        "id": "835f6431-ce78-4a8a-8c70-0ecb94bf03b2",
+        "name": "Set variables"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Set variables body",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code: HTML a Markdown": {
+        "main": [
+          [
+            {
+              "node": "Set variables",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code: Enviar correo": {
+        "main": [
+          [
+            {
+              "node": "Enviar mensaje al grupo de teams",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set variables body": {
+        "main": [
+          [
+            {
+              "node": "Set variables primeras variables",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set variables primeras variables": {
+        "main": [
+          [
+            {
+              "node": "Code: HTML a Markdown",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set variables": {
+        "main": [
+          [
+            {
+              "node": "Code: Enviar correo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "system migration",
+    "name": null,
+    "description": null
+  }
+}

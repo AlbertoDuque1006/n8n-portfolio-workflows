@@ -1,0 +1,404 @@
+{
+  "updatedAt": "2026-06-09T00:16:56.370Z",
+  "createdAt": "2026-06-08T14:34:42.547Z",
+  "id": "4QF2pp6OhqIiBiPz",
+  "name": "JARVIS_RESPONDER",
+  "description": "JARVIS response dispatcher: receives formatted messages from ROUTER and REMINDERS, responds immediately to the caller, sends the Telegram message, then logs the assistant response to jarvis_conversations for conversation history.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "jarvis/responder",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8f048e0d-624a-4de8-a60e-1b5cd1c6fe5e",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b40620ca-1ad4-43f8-8176-82c68c3a1d8f"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst chatId = body.chatId ?? 0;\nconst message = String(body.message ?? body.text ?? '');\nconst parseMode = body.parseMode ?? body.parse_mode ?? '';\nconst msgType = body.msgType ?? 'text';\nreturn [{ json: { chatId, message, parseMode, msgType } }];"
+      },
+      "id": "362d43da-d540-4b5c-8ff0-7d2cdb002654",
+      "name": "Normalizar Input Responder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      },
+      "id": "9176197b-d9db-4654-bb85-546e675dd50a",
+      "name": "Responder OK Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Normalizar Input Responder').first().json.chatId }}",
+        "text": "={{ $('Normalizar Input Responder').first().json.message }}",
+        "additionalFields": {
+          "parse_mode": "={{ $('Normalizar Input Responder').first().json.parseMode || '' }}"
+        }
+      },
+      "id": "10570e05-49ce-40e6-bd5b-51ed7c825dbf",
+      "name": "Enviar Mensaje Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "webhookId": "f7637ad3-8be2-469f-8fc4-cb2680382fa9",
+      "credentials": {
+        "telegramApi": {
+          "id": "LpX5kW8pTmulcQSn",
+          "name": "JARVIS - DAVID"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id FROM jarvis_users WHERE telegram_chat_id = {{ $('Normalizar Input Responder').first().json.chatId }} AND is_active = TRUE LIMIT 1",
+        "options": {}
+      },
+      "id": "8a522fdc-69a8-488d-a3b4-bdd846274d15",
+      "name": "Lookup User por ChatId",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        896,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO jarvis_conversations (user_id, role, content, message_type) VALUES ({{ $json.id }}, 'assistant', '{{ $('Normalizar Input Responder').first().json.message.replace(/'/g, \"''\").substring(0, 4000) }}', 'text') RETURNING id",
+        "options": {}
+      },
+      "id": "f155f54e-6358-449a-bfff-d1c013262376",
+      "name": "Log Conversacion Asistente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1120,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Responder Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Input Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Input Responder": {
+      "main": [
+        [
+          {
+            "node": "Responder OK Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder OK Responder": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Mensaje Telegram": {
+      "main": [
+        [
+          {
+            "node": "Lookup User por ChatId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup User por ChatId": {
+      "main": [
+        [
+          {
+            "node": "Log Conversacion Asistente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": {},
+  "versionId": "f5357dd8-60d2-4867-8828-910c9307001e",
+  "activeVersionId": "f5357dd8-60d2-4867-8828-910c9307001e",
+  "versionCounter": 2,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-08T14:34:42.576Z",
+      "createdAt": "2026-06-08T14:34:42.576Z",
+      "role": "workflow:owner",
+      "workflowId": "4QF2pp6OhqIiBiPz",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-06-09T00:13:45.950Z",
+    "createdAt": "2026-06-09T00:13:45.950Z",
+    "versionId": "f5357dd8-60d2-4867-8828-910c9307001e",
+    "workflowId": "4QF2pp6OhqIiBiPz",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "jarvis/responder",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "8f048e0d-624a-4de8-a60e-1b5cd1c6fe5e",
+        "name": "Responder Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "b40620ca-1ad4-43f8-8176-82c68c3a1d8f"
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst chatId = body.chatId ?? 0;\nconst message = String(body.message ?? body.text ?? '');\nconst parseMode = body.parseMode ?? body.parse_mode ?? '';\nconst msgType = body.msgType ?? 'text';\nreturn [{ json: { chatId, message, parseMode, msgType } }];"
+        },
+        "id": "362d43da-d540-4b5c-8ff0-7d2cdb002654",
+        "name": "Normalizar Input Responder",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "noData",
+          "options": {}
+        },
+        "id": "9176197b-d9db-4654-bb85-546e675dd50a",
+        "name": "Responder OK Responder",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          448,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "chatId": "={{ $('Normalizar Input Responder').first().json.chatId }}",
+          "text": "={{ $('Normalizar Input Responder').first().json.message }}",
+          "additionalFields": {
+            "parse_mode": "={{ $('Normalizar Input Responder').first().json.parseMode || '' }}"
+          }
+        },
+        "id": "10570e05-49ce-40e6-bd5b-51ed7c825dbf",
+        "name": "Enviar Mensaje Telegram",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          672,
+          0
+        ],
+        "webhookId": "f7637ad3-8be2-469f-8fc4-cb2680382fa9",
+        "credentials": {
+          "telegramApi": {
+            "id": "LpX5kW8pTmulcQSn",
+            "name": "JARVIS - DAVID"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT id FROM jarvis_users WHERE telegram_chat_id = {{ $('Normalizar Input Responder').first().json.chatId }} AND is_active = TRUE LIMIT 1",
+          "options": {}
+        },
+        "id": "8a522fdc-69a8-488d-a3b4-bdd846274d15",
+        "name": "Lookup User por ChatId",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          896,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO jarvis_conversations (user_id, role, content, message_type) VALUES ({{ $json.id }}, 'assistant', '{{ $('Normalizar Input Responder').first().json.message.replace(/'/g, \"''\").substring(0, 4000) }}', 'text') RETURNING id",
+          "options": {}
+        },
+        "id": "f155f54e-6358-449a-bfff-d1c013262376",
+        "name": "Log Conversacion Asistente",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1120,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "IsrzB1nHT4dTM3sM",
+            "name": "Postgres BD_Test"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Responder Webhook": {
+        "main": [
+          [
+            {
+              "node": "Normalizar Input Responder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalizar Input Responder": {
+        "main": [
+          [
+            {
+              "node": "Responder OK Responder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Responder OK Responder": {
+        "main": [
+          [
+            {
+              "node": "Enviar Mensaje Telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Enviar Mensaje Telegram": {
+        "main": [
+          [
+            {
+              "node": "Lookup User por ChatId",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Lookup User por ChatId": {
+        "main": [
+          [
+            {
+              "node": "Log Conversacion Asistente",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "David Tenorio Cruz",
+    "name": null,
+    "description": null,
+    "autosaved": true,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-06-09T00:17:07.571Z",
+        "id": 78,
+        "workflowId": "4QF2pp6OhqIiBiPz",
+        "versionId": "f5357dd8-60d2-4867-8828-910c9307001e",
+        "event": "activated",
+        "userId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    ]
+  }
+}

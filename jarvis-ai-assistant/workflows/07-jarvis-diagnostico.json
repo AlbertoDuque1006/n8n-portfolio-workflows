@@ -1,0 +1,123 @@
+{
+  "updatedAt": "2026-06-09T01:10:44.540Z",
+  "createdAt": "2026-06-09T01:09:20.762Z",
+  "id": "AXnWxtM3r0HBWeaD",
+  "name": "JARVIS DIAGNOSTICO",
+  "description": "Diagnóstico temporal: verifica jarvis_users y Redis buffers activos.",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "70fe9e17-0778-4ae9-8967-02965cc23d10",
+      "name": "Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "90ddef3d-4aa9-4191-868e-860b56debe8c",
+      "name": "Check jarvis_users",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, telegram_user_id, telegram_chat_id, username, is_active FROM jarvis_users; INSERT INTO jarvis_users (telegram_user_id, telegram_chat_id, username, first_name, is_active) VALUES (7595026461, 7595026461, 'david', 'David', TRUE) ON CONFLICT (telegram_user_id) DO UPDATE SET is_active = TRUE RETURNING id, telegram_user_id, username, 'upserted' AS status;"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "IsrzB1nHT4dTM3sM",
+          "name": "Postgres BD_Test"
+        }
+      }
+    },
+    {
+      "id": "f6d7bef0-d9fd-4841-834d-195ffd488d8e",
+      "name": "Check Redis Buffers",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "operation": "keys",
+        "keyPattern": "jarvis:*",
+        "getValues": true
+      },
+      "credentials": {
+        "redis": {
+          "id": "nbhSzTen4hsNL6Bf",
+          "name": "Redis account - Local"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual": {
+      "main": [
+        [
+          {
+            "node": "Check jarvis_users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check jarvis_users": {
+      "main": [
+        [
+          {
+            "node": "Check Redis Buffers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "nodeGroups": [],
+  "pinData": null,
+  "versionId": "1210a8b0-29db-421e-814f-67b7aa29b199",
+  "activeVersionId": null,
+  "versionCounter": 3,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-06-09T01:09:20.764Z",
+      "createdAt": "2026-06-09T01:09:20.764Z",
+      "role": "workflow:owner",
+      "workflowId": "AXnWxtM3r0HBWeaD",
+      "projectId": "iJF5x7detjjaFbBl",
+      "project": {
+        "updatedAt": "2025-07-03T15:35:23.043Z",
+        "createdAt": "2025-07-03T15:30:31.527Z",
+        "id": "iJF5x7detjjaFbBl",
+        "name": "David Tenorio Cruz <contact@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "1e32d79a-e10c-4526-ab4e-773ca47d9603"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": null
+}
