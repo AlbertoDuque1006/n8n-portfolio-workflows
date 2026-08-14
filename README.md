@@ -1,9 +1,6 @@
 # ⚙️ n8n Automation Portfolio — Alberto Duque
 
 Selección curada de workflows de **n8n** desarrollados en entornos productivos, sanitizados y documentados para portafolio público. Cada carpeta es un proyecto independiente con su propio README, diagrama de arquitectura y guía de despliegue.
-
-De más de 90 workflows revisados, se descartaron pruebas, copias y flujos desechables (`TEST`, `PRUEBA`, `My workflow N`, duplicados), quedando solo los que aportan valor real de portafolio y los que se complementan entre sí como un sistema.
-
 ---
 
 ## 📂 Proyectos
